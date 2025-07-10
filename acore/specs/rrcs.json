@@ -1,0 +1,21 @@
+{
+  "name": "rrcs",
+  "type": "",
+  "ins": [
+    "ta",
+    "tc",
+    "ca",
+    "cc"
+  ],
+  "outs": [
+    "go"
+  ],
+  "domains": [
+    "G ((ta -> X(tc)) && (X(tc) -> ta))",
+    "G (X(cc) -> (ca && go))"
+  ],
+  "goals": [
+    "G (tc -> !cc)",
+    "G (ta -> !go)"
+  ]
+}

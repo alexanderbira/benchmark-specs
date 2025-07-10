@@ -1,0 +1,20 @@
+{
+  "name": "telephone",
+  "type": "",
+  "ins": [
+    "c",
+    "f",
+    "d",
+    "o"
+  ],
+  "outs": [],
+  "domains": [
+    "G(o -> ! c)",
+    "G(c -> ! f)",
+    "G(o -> ! f)"
+  ],
+  "goals": [
+    "G(c  -> (c  U (f || d)) )",
+    "G(c  -> (c  U (o || d)) )"
+  ]
+}

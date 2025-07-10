@@ -1,0 +1,16 @@
+{
+  "name": "retractionPattern2",
+  "type": "",
+  "ins": [
+    "p",
+    "q",
+    "r",
+    "s"
+  ],
+  "outs": [],
+  "domains": [],
+  "goals": [
+    "G (p -> (q W s))",
+    "G (q -> r)"
+  ]
+}

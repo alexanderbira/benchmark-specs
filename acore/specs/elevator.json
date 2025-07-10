@@ -1,0 +1,17 @@
+{
+  "name": "elevator",
+  "type": "",
+  "ins": [
+    "open",
+    "call"
+  ],
+  "outs": [
+    "atfloor"
+  ],
+  "domains": [
+    "G ( X(open) -> atfloor)"
+  ],
+  "goals": [
+    "G(call -> F(open))"
+  ]
+}

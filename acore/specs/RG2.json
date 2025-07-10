@@ -1,0 +1,15 @@
+{
+  "name": "RG2",
+  "type": "",
+  "ins": [
+    "req",
+    "cancel"
+  ],
+  "outs": [
+    "grant"
+  ],
+  "domains": [],
+  "goals": [
+    "G( (cancel || grant) -> X !grant)"
+  ]
+}

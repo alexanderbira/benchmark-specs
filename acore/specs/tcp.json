@@ -1,0 +1,16 @@
+{
+  "name": "tcp",
+  "type": "",
+  "ins": [
+    "delivered",
+    "ack"
+  ],
+  "outs": [
+    "send"
+  ],
+  "domains": [],
+  "goals": [
+    "G(send -> (!ack U delivered))",
+    "G (delivered -> (!send U ack))"
+  ]
+}

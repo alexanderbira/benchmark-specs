@@ -1,0 +1,16 @@
+{
+  "name": "lily11",
+  "type": "",
+  "ins": [
+    "req",
+    "go"
+  ],
+  "outs": [
+    "grant",
+    "ack"
+  ],
+  "domains": [],
+  "goals": [
+    "!( G(req -> F ack) && G(go -> F grant) )"
+  ]
+}

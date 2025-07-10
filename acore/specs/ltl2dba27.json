@@ -1,0 +1,14 @@
+{
+  "name": "ltl2dba27",
+  "type": "",
+  "ins": [
+    "p"
+  ],
+  "outs": [
+    "acc"
+  ],
+  "domains": [],
+  "goals": [
+    "(F G !(p)) <-> (G F acc)"
+  ]
+}

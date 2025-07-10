@@ -1,0 +1,18 @@
+{
+  "name": "minepump",
+  "type": "",
+  "ins": [
+    "h",
+    "m"
+  ],
+  "outs": [
+    "p"
+  ],
+  "domains": [
+    "G((p && X(p)) -> X(X(! h)))"
+  ],
+  "goals": [
+    "G(h -> X(p))",
+    "G(m -> X(! p))"
+  ]
+}

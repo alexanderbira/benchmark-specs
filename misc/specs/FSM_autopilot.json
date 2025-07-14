@@ -1,0 +1,40 @@
+{
+  "name": "FSM - Autopilot",
+  "type": "LTL",
+  "ins": [
+    "mode",
+    "request",
+    "apfail",
+    "limits",
+    "failure",
+    "supported",
+    "standby"
+  ],
+  "outs": [
+    "sensor_state_0",
+    "sensor_state_1",
+    "ap_state_0",
+    "ap_state_1",
+    "ap_state_2"
+  ],
+  "domains": [],
+  "goals": [
+    "(G ((! (sensor_state_0)) || (! (sensor_state_1))))",
+    "(G (((! (ap_state_0)) || (! (ap_state_1))) || (! (ap_state_2))))",
+    "(G (((! (ap_state_0)) || (! (ap_state_1))) || (ap_state_2)))",
+    "(G (((! (ap_state_0)) || (ap_state_1)) || (! (ap_state_2))))",
+    "(G (((((! (standby)) && (supported)) && (! (failure))) && (limits)) -> (X (((ap_state_0) && (! (ap_state_1))) && (! (ap_state_2))))))",
+    "(G (((((! (ap_state_0)) && (! (ap_state_1))) && (! (ap_state_2))) && (standby)) -> (X (((! (ap_state_0)) && (! (ap_state_1))) && (ap_state_2)))))",
+    "(G (((((((! (ap_state_0)) && (! (ap_state_1))) && (! (ap_state_2))) && (supported)) && (! (sensor_state_0))) && (! (sensor_state_1))) -> (X (((! (ap_state_0)) && (ap_state_1)) && (! (ap_state_2))))))",
+    "(G ((((((! (ap_state_0)) && (ap_state_1)) && (! (ap_state_2))) && (! (sensor_state_0))) && (sensor_state_1)) -> (X (((! (ap_state_0)) && (ap_state_1)) && (ap_state_2)))))",
+    "(G (((((! (ap_state_0)) && (ap_state_1)) && (! (ap_state_2))) && (standby)) -> (X (((! (ap_state_0)) && (! (ap_state_1))) && (ap_state_2)))))",
+    "(G (((((((! (ap_state_0)) && (ap_state_1)) && (ap_state_2)) && (standby)) && (! (sensor_state_0))) && (! (sensor_state_1))) -> (X (((! (ap_state_0)) && (! (ap_state_1))) && (ap_state_2)))))",
+    "(G (((((((ap_state_0) && (! (ap_state_1))) && (! (ap_state_2))) && (supported)) && (! (sensor_state_0))) && (! (sensor_state_1))) -> (X (((! (ap_state_0)) && (! (ap_state_1))) && (! (ap_state_2))))))",
+    "(G (((((! (ap_state_0)) && (! (ap_state_1))) && (ap_state_2)) && (! (standby))) -> (X (((! (ap_state_0)) && (! (ap_state_1))) && (! (ap_state_2))))))",
+    "(G (((((! (ap_state_0)) && (! (ap_state_1))) && (ap_state_2)) && (apfail)) -> (X (((! (ap_state_0)) && (ap_state_1)) && (ap_state_2)))))",
+    "(G ((((! (sensor_state_0)) && (! (sensor_state_1))) && (limits)) -> (X ((! (sensor_state_0)) && (sensor_state_1)))))",
+    "(G ((((! (sensor_state_0)) && (! (sensor_state_1))) && (! (request))) -> (X ((sensor_state_0) && (! (sensor_state_1))))))",
+    "(G (((((! (sensor_state_0)) && (sensor_state_1)) && (! (request))) && (! (limits))) -> (X ((sensor_state_0) && (! (sensor_state_1))))))",
+    "(G (((((sensor_state_0) && (! (sensor_state_1))) && (request)) && (mode)) -> (X ((! (sensor_state_0)) && (! (sensor_state_1))))))"
+  ]
+}

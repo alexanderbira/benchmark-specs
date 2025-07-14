@@ -10,14 +10,16 @@ GLOBAL {
 
   DEFINITIONS {
     enum AP_STATE = 
-      TRANSITION : 00
-      STANDBY    : 01
-      NOMINAL    : 10
-      MANEUVER   : 11;
+      TRANSITION : 000
+      STANDBY    : 001
+      NOMINAL    : 010
+      MANEUVER   : 011
+      PULLUP     : 100;
     
     enum SENSOR_STATE = 
-      NOMINAL : 0
-      FAULT   : 1
+      GOOD         : 00
+      FAULT        : 01
+      S_TRANSITION : 10
   }
 }
 
@@ -29,31 +31,29 @@ MAIN {
     failure;
     limits;
     apfail;
-    ap_state;
     request;
     mode;
   }
 
   OUTPUTS {
-    AP_STATE app_state;
+    AP_STATE ap_state;
     SENSOR_STATE sensor_state;
-    pullup;
   }
 
   GUARANTEES {
-    G(!standby & supported & !failure & limits -> X pullup);
-    G (ap_state == TRANSITION && standby -> X ap_state == STANDBY);
-    G(ap_state == TRANSITION && supported && good -> X ap_state == NOMINAL);
-    G(ap_state == NOMINAL && good -> X state == MANEUVER);
-    G(ap_state == NOMINAL && standby -> X state == STANDBY);
-    G(ap_state == MANEUVER && standby and good -> X state == STANDBY);
-    G(ap_state == PULLUP && supported and good -> X state == TRANSITION);
-    G(ap_state == STANDBY && ! standby -> X state == TRANSITION);
-    G(ap_state == STANDBY && apfail -> X state == MANEUVER);
-    G(sensor_state == NOMINAL && limits -> X sensor_state == FAULT);
-    G(sensor_state == NOMINAL && ! request -> X sensor_state == TRANSITION);
-    G(sensor_state == FAULT && ! request && ! limits -> X sensor_state == TRANSITION);
-    G(sensor_state == TRANSITION && request && mode -> X sensor_state == NOMINAL);
+    G(!standby && supported && !failure && limits -> X ap_state == PULLUP);
+    G(ap_state == TRANSITION && standby -> X ap_state == STANDBY);
+    G(ap_state == TRANSITION && supported && sensor_state == GOOD -> X ap_state == NOMINAL);
+    G(ap_state == NOMINAL && sensor_state == FAULT -> X ap_state == MANEUVER);
+    G(ap_state == NOMINAL && standby -> X ap_state == STANDBY);
+    G(ap_state == MANEUVER && standby && sensor_state == GOOD -> X ap_state == STANDBY);
+    G(ap_state == PULLUP && supported && sensor_state == GOOD -> X ap_state == TRANSITION);
+    G(ap_state == STANDBY && ! standby -> X ap_state == TRANSITION);
+    G(ap_state == STANDBY && apfail -> X ap_state == MANEUVER);
+    G(sensor_state == GOOD && limits -> X sensor_state == FAULT);
+    G(sensor_state == GOOD && ! request -> X sensor_state == S_TRANSITION);
+    G(sensor_state == FAULT && ! request && ! limits -> X sensor_state == S_TRANSITION);
+    G(sensor_state == S_TRANSITION && request && mode -> X sensor_state == GOOD);
   }
 
 }

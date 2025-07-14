@@ -1,2 +1,4 @@
 # MacOS directory metadata
 .DS_Store
+
+__pycache__

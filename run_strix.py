@@ -4,37 +4,38 @@ import json
 import subprocess
 import argparse
 
-def run_strix_from_json(json_file):
+def run_strix_from_json(json_file, extra_args=None, capture_output=False):
+    import json
+    import subprocess
+
+    if extra_args is None:
+        extra_args = []
+
     with open(json_file, 'r') as f:
         spec = json.load(f)
 
-    # Build formula
-    all_formulas = spec.get("domains", []) + spec.get("goals", [])
+    all_formulas = map(lambda s: f"({s})", spec.get("domains", []) + spec.get("goals", []))
     formula = ' & '.join(all_formulas)
 
-    # Prepare inputs and outputs
     ins = ','.join(spec.get("ins", []))
     outs = ','.join(spec.get("outs", []))
 
-    # Build strix command
     cmd = [
         "strix",
         "-f", formula,
         "--ins=" + ins,
         "--outs=" + outs
-    ]
+    ] + extra_args
 
-    print("Running command:", ' '.join(cmd))
-
-    # Run the command
-    try:
+    if capture_output:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return spec.get("name", json_file), result.stdout.strip()
+    else:
         subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Strix failed with error: {e}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Strix with spec from JSON.")
+    parser = argparse.ArgumentParser(description="Run Strix with spec from JSON.", allow_abbrev=False)
     parser.add_argument("json_file", help="Path to the spec JSON file.")
-    args = parser.parse_args()
+    args, extra_args = parser.parse_known_args()
 
-    run_strix_from_json(args.json_file)
+    print(run_strix_from_json(args.json_file, extra_args))

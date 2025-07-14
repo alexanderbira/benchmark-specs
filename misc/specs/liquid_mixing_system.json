@@ -1,0 +1,30 @@
+{
+  "name": "Liquid Mixing System",
+  "type": "",
+  "ins": [
+    "start",
+    "stop",
+    "level_1_reached",
+    "level_2_reached",
+    "60_second_timer_ends",
+    "120_second_timer_ends"
+  ],
+  "outs": [
+    "valve_0_opened",
+    "valve_1_opened",
+    "valve_2_opened",
+    "stirring",
+    "start_60_second_timer",
+    "start_120_second_timer"
+  ],
+  "domains": [],
+  "goals": [
+    "G (start -> X valve_0_opened W level_1_reached)",
+    "G (level_1_reached -> X ! valve_0_opened)",
+    "G (level_1_reached -> X valve_1_opened W level_2_reached )",
+    "G (level_2_reached -> X ! valve_1_opened)",
+    "G (level_2_reached -> X (start_60_sec_timer && stiring W (60_second_timer_ends || stop))",
+    "G (60_seconds_timer_ends -> X (start_120_second_timer && valve_2_opened W (120_second_timer_ends || stop))",
+    "G (stop -> X ! valve_0_opened && ! valve_1_opened && ! valve_2_opened && ! stirring)"
+  ]
+}

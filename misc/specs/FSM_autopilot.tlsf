@@ -1,0 +1,59 @@
+// There are some mistakes in the spec - TODO: fix and convert to JSON
+INFO {
+  TITLE:       "FSM - Autopilot"
+  DESCRIPTION: "..."
+  SEMANTICS:   Mealy
+  TARGET:      Mealy
+}
+
+GLOBAL {
+
+  DEFINITIONS {
+    enum AP_STATE = 
+      TRANSITION : 00
+      STANDBY    : 01
+      NOMINAL    : 10
+      MANEUVER   : 11;
+    
+    enum SENSOR_STATE = 
+      NOMINAL : 0
+      FAULT   : 1
+  }
+}
+
+MAIN {
+
+  INPUTS {
+    standby;
+    supported;
+    failure;
+    limits;
+    apfail;
+    ap_state;
+    request;
+    mode;
+  }
+
+  OUTPUTS {
+    AP_STATE app_state;
+    SENSOR_STATE sensor_state;
+    pullup;
+  }
+
+  GUARANTEES {
+    G(!standby & supported & !failure & limits -> X pullup);
+    G (ap_state == TRANSITION && standby -> X ap_state == STANDBY);
+    G(ap_state == TRANSITION && supported && good -> X ap_state == NOMINAL);
+    G(ap_state == NOMINAL && good -> X state == MANEUVER);
+    G(ap_state == NOMINAL && standby -> X state == STANDBY);
+    G(ap_state == MANEUVER && standby and good -> X state == STANDBY);
+    G(ap_state == PULLUP && supported and good -> X state == TRANSITION);
+    G(ap_state == STANDBY && ! standby -> X state == TRANSITION);
+    G(ap_state == STANDBY && apfail -> X state == MANEUVER);
+    G(sensor_state == NOMINAL && limits -> X sensor_state == FAULT);
+    G(sensor_state == NOMINAL && ! request -> X sensor_state == TRANSITION);
+    G(sensor_state == FAULT && ! request && ! limits -> X sensor_state == TRANSITION);
+    G(sensor_state == TRANSITION && request && mode -> X sensor_state == NOMINAL);
+  }
+
+}

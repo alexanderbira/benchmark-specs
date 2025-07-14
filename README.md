@@ -14,6 +14,19 @@ Each test case is in the following JSON format:
 }
 ```
 
+## Utility Scripts
+A few Python utility scripts are provided for conversion to and from the above JSON format, as well as other operations.
+
+- `run_strix.py` - a wrapper for running [Strix](https://github.com/meyerphi/strix) from a JSON file
+  
+  Usage: `python run_strix.py spec.json [strix flags]` (assumes Strix is installed)
+- `check_realizability.py` - a script for checking the realizability (with Strix) of every JSON spec in a directory
+  
+  Usage: `python check_realizability.py [directory]`
+- `to_spectra.py` - a script for converting a JSON spec to a `.spectra` spec
+  
+  Usage: `python to_spectra.py spec.json`
+
 ## Syfco
 [Syfco](https://github.com/reactive-systems/syfco) is used to convert from the TLSF format. This repo has a Docker file to allow for syfco to run on any machine.
 

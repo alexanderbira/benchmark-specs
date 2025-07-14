@@ -10,6 +10,7 @@
   ],
   "domains": [],
   "goals": [
+    "G(req -> F (X grant))",
     "G( (cancel || grant) -> X !grant)"
   ]
 }

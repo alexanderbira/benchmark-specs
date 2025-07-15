@@ -1,0 +1,59 @@
+// There are some mistakes in the spec - TODO: fix and convert to JSON
+INFO {
+  TITLE:       "FSM - Autopilot"
+  DESCRIPTION: "..."
+  SEMANTICS:   Mealy
+  TARGET:      Mealy
+}
+
+GLOBAL {
+  DEFINITIONS {
+    enum STATE =
+      ap_maneuver_state   : 00
+      ap_nominal_state    : 01
+      ap_standby_state    : 10
+      ap_transition_state : 11;
+    
+    enum SENSTATE =
+      sen_fault_state      : 00
+      sen_nominal_state    : 01
+      sen_transition_state : 10
+  }
+}
+
+MAIN {
+
+  INPUTS {
+    apfail;
+    good;
+    limits;
+    request;
+    SENSTATE senstate;
+    standby;
+    STATE state;
+    supported;
+  }
+
+  OUTPUTS {
+    SENSTATE SENSTATE_;
+    STATE STATE_;
+    pullup;
+  }
+
+  GUARANTEES {
+    (G ((standby && (state == ap_transition_state)) -> (STATE_ == ap_standby_state)));
+    (G (((state == ap_nominal_state) && standby) -> (STATE_ == ap_standby_state)));
+    (G ((((state == ap_transition_state) && good) && supported) -> (STATE_ == ap_nominal_state)));
+    (G (((state == ap_standby_state) && (! standby)) -> (STATE_ == ap_transition_state)));
+    (G (((senstate == sen_nominal_state) && (! request)) -> (SENSTATE_ == sen_transition_state)));
+    (G (((state == ap_standby_state) && apfail) -> (STATE_ == ap_maneuver_state)));
+    (G ((((senstate == sen_fault_state) && (! request)) && (! limits)) -> (SENSTATE_ == sen_transition_state)));
+    (G (((senstate == sen_nominal_state) && limits) -> (SENSTATE_ == sen_fault_state)));
+    (G (((senstate == sen_transition_state) && request) -> (SENSTATE_ == sen_nominal_state)));
+    (F ((((state == ap_maneuver_state) && supported) && good) -> (STATE_ == ap_transition_state)));
+    (G (((! good) && (state == ap_nominal_state)) -> (STATE_ == ap_maneuver_state)));
+    (G ((((limits && (! standby)) && (! apfail)) && supported) -> pullup));
+    ((G ((((state == ap_maneuver_state) && standby) && good) -> (STATE_ == ap_standby_state))) || (G ((((state == ap_maneuver_state) && standby) && good) -> (STATE_ == ap_standby_state))));
+  }
+
+}

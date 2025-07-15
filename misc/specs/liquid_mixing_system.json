@@ -1,6 +1,6 @@
 {
   "name": "Liquid Mixing System",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "start",
     "stop",

@@ -1,8 +1,22 @@
 # Utility to convert a JSON file to a spectra file
+# May not produce fully valid spectra code, but it's close enough to debug manually
 
 import json
 import os
 import sys
+import re
+
+def transform_expression(expr):
+    expr = expr.replace("&&", "&")
+    expr = expr.replace("||", "|")
+    expr = re.sub(r'\bX\b', 'next', expr)
+
+    match = re.fullmatch(r'G\(F\((.*)\)\)', expr)
+    if match:
+        inner = match.group(1)
+        expr = f"GF({inner})"
+
+    return expr
 
 def json_to_spectra(input_path):
     # Read JSON content
@@ -30,13 +44,15 @@ def json_to_spectra(input_path):
         lines.append("")
 
     for asm in domains:
+        transformed = transform_expression(asm)
         lines.append("assumption")
-        lines.append(f"  {asm};")
+        lines.append(f"  {transformed};")
         lines.append("")
 
     for gar in goals:
+        transformed = transform_expression(gar)
         lines.append("guarantee")
-        lines.append(f"  {gar};")
+        lines.append(f"  {transformed};")
         lines.append("")
 
     # Finalize output

@@ -1,6 +1,6 @@
 {
   "name": "ltl2dba_theta_2",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "p_0",
     "p_1",

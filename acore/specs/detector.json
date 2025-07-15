@@ -1,6 +1,6 @@
 {
   "name": "detector",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "r_0",
     "r_1"

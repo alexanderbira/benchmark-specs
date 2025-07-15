@@ -1,6 +1,6 @@
 {
   "name": "elevator",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "open",
     "call"

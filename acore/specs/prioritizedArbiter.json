@@ -1,6 +1,6 @@
 {
   "name": "prioritizedArbiter",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "r_m",
     "r_1",

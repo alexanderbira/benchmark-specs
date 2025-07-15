@@ -1,6 +1,6 @@
 {
   "name": "telephone",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "c",
     "f",

@@ -1,6 +1,6 @@
 {
   "name": "lily01",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "req",
     "cancel",

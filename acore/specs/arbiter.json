@@ -1,6 +1,6 @@
 {
   "name": "arbiter",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "a",
     "r1",

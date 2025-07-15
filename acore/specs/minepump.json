@@ -1,6 +1,6 @@
 {
   "name": "minepump",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "h",
     "m"

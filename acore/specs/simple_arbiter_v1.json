@@ -1,6 +1,6 @@
 {
   "name": "simple_arbiter_v1",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "r_0",
     "r_1"

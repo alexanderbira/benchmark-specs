@@ -1,6 +1,6 @@
 {
   "name": "achievepattern",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "r_0",
     "r_1"

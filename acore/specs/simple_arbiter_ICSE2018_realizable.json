@@ -1,6 +1,6 @@
 {
   "name": "simple_arbiter_ICSE2018_realizable",
-  "type": "",
+  "type": "GR(1)",
   "ins": [
     "r1",
     "r2"

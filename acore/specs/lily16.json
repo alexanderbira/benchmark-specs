@@ -1,6 +1,6 @@
 {
   "name": "lily16",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "r0",
     "r1",

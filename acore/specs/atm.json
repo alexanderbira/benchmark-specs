@@ -1,6 +1,6 @@
 {
   "name": "atm",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "p",
     "q",

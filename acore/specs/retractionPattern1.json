@@ -1,6 +1,6 @@
 {
   "name": "retractionPattern1",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "p",
     "q"

@@ -1,6 +1,6 @@
 {
   "name": "RG2",
-  "type": "",
+  "type": "LTL",
   "ins": [
     "req",
     "cancel"

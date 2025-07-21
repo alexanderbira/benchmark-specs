@@ -1,59 +1,113 @@
-// There are some mistakes in the spec - TODO: fix and convert to JSON
 INFO {
   TITLE:       "FSM - Autopilot"
-  DESCRIPTION: "..."
+  DESCRIPTION: "This model represents an abstraction of detailed design requirements for an Advanced Autopilot System interacting with an independent sensor platform. The Finite State Machine (FSM) represents a cyber-physical system with two independent components executing in real time for the purpose of ensuring a safe automatic operation in the vicinity of hazardous obstacles. The autopilot system, tightly integrated with the vehicle flight control computer, is responsible for commanding a safety maneuver in the event of a hazard. The sensor is the reporting agent to the autopilot with observability on imminent danger. When the conditions are met to allow an autopilot operation (supported and no failures) and the pilot is not manually controlling the vehicle (standby is false), the autopilot will behave normally until a maneuver is required in the event of a hazard (sensor is not good)."
   SEMANTICS:   Mealy
   TARGET:      Mealy
 }
 
 GLOBAL {
   DEFINITIONS {
-    enum STATE =
-      ap_maneuver_state   : 00
-      ap_nominal_state    : 01
-      ap_standby_state    : 10
-      ap_transition_state : 11;
+    enum AP_STATE =
+      AP_TRANSITION : 00
+      AP_NOMINAL    : 01
+      AP_STANDBY    : 10
+      AP_MANEUVER   : 11;
     
-    enum SENSTATE =
-      sen_fault_state      : 00
-      sen_nominal_state    : 01
-      sen_transition_state : 10
+    enum SEN_STATE =
+      SEN_NOMINAL    : 00
+      SEN_TRANSITION : 01
+      SEN_FAULT      : 10;
   }
 }
 
 MAIN {
 
   INPUTS {
-    apfail;
-    good;
-    limits;
-    request;
-    SENSTATE senstate;
+    // Indication that the pilot is in control of the vehicle
     standby;
-    STATE state;
+
+    // Indication of an autopilot failure proficed by an external source
+    apfail;
+
+    // Indication of general system health. Must be true to enable operation
     supported;
+
+    // External indication to sensor on faulty condition impeding safe operation
+    limits;
   }
 
   OUTPUTS {
-    SENSTATE SENSTATE_;
-    STATE STATE_;
+    // An autopilot's command to pull up
     pullup;
+
+    // Prior sensor output. Indicates a detected fault when false
+    good;
+
+    // Internal variable indicating the autopilot is not in a transition state
+    mode;
+
+    // Internal variable indicating transition to a nominal operation
+    request;
+
+    // The autopilot state
+    AP_STATE ap_state;
+
+    // The autopilot's belief about its sensor state
+    SEN_STATE sen_state;
   }
 
   GUARANTEES {
-    (G ((standby && (state == ap_transition_state)) -> (STATE_ == ap_standby_state)));
-    (G (((state == ap_nominal_state) && standby) -> (STATE_ == ap_standby_state)));
-    (G ((((state == ap_transition_state) && good) && supported) -> (STATE_ == ap_nominal_state)));
-    (G (((state == ap_standby_state) && (! standby)) -> (STATE_ == ap_transition_state)));
-    (G (((senstate == sen_nominal_state) && (! request)) -> (SENSTATE_ == sen_transition_state)));
-    (G (((state == ap_standby_state) && apfail) -> (STATE_ == ap_maneuver_state)));
-    (G ((((senstate == sen_fault_state) && (! request)) && (! limits)) -> (SENSTATE_ == sen_transition_state)));
-    (G (((senstate == sen_nominal_state) && limits) -> (SENSTATE_ == sen_fault_state)));
-    (G (((senstate == sen_transition_state) && request) -> (SENSTATE_ == sen_nominal_state)));
-    (F ((((state == ap_maneuver_state) && supported) && good) -> (STATE_ == ap_transition_state)));
-    (G (((! good) && (state == ap_nominal_state)) -> (STATE_ == ap_maneuver_state)));
-    (G ((((limits && (! standby)) && (! apfail)) && supported) -> pullup));
-    ((G ((((state == ap_maneuver_state) && standby) && good) -> (STATE_ == ap_standby_state))) || (G ((((state == ap_maneuver_state) && standby) && good) -> (STATE_ == ap_standby_state))));
+    // R01:
+    // Exceeding sensor limits shall latch an autopilot pullup when the pilot is not in control (not standby) and the system is supported without failures (not apfail).
+    G (limits && !standby && supported && !apfail -> X pullup);
+
+    // R02:
+    // The autopilot shall change states from TRANSITION to STANDBY when the pilot is in control (standby).
+    G (ap_state == AP_TRANSITION && standby -> X ap_state == AP_STANDBY);
+
+    // R03:
+    // The autopilot shall change states from TRANSITION to NOMINAL when the system is supported and sensor data is good.
+    G (ap_state == AP_TRANSITION && supported && good -> X ap_state == AP_NOMINAL);
+
+    // R04:
+    // The autopilot shall change states from NOMINAL to MANEUVER when the sensor data is not good.
+    G (ap_state == AP_NOMINAL && !good -> X ap_state == AP_MANEUVER);
+
+    // R05:
+    // The autopilot shall change states from NOMINAL to STANDBY when the pilot is in control (standby).
+    G (ap_state == AP_NOMINAL && standby -> X ap_state == AP_STANDBY);
+
+    // R06:
+    // The autopilot shall change states from MANEUVER to STANDBY when the pilot is in control (standby) and sensor data is good.
+    G (ap_state == AP_MANEUVER && standby && good -> X ap_state == AP_STANDBY);
+
+    // R07:
+    // The autopilot shall change states from [MANEUVER] to TRANSITION when the system is supported and sensor data is good.
+    G (ap_state == AP_MANEUVER && supported && good -> X ap_state == AP_TRANSITION);
+
+    // R08:
+    // The autopilot shall change states from STANDBY to TRANSITION when the pilot is not in control (not standby).
+    G (ap_state == AP_STANDBY && !standby -> X ap_state == AP_TRANSITION);
+
+    // R09:
+    // The autopilot shall change states from STANDBY to MANEUVER when a failure occurs (apfail).
+    G (ap_state == AP_STANDBY && apfail -> X ap_state == AP_MANEUVER);
+
+    // R10:
+    // The sensor shall change states from NOMINAL to FAULT when limits are exceeded.
+    G (sen_state == SEN_NOMINAL && limits -> X sen_state == SEN_FAULT);
+
+    // R11:
+    // The sensor shall change states from NOMINAL to TRANSITION when the autopilot is not requesting support (not request).
+    G (sen_state == SEN_NOMINAL && !request -> X sen_state == SEN_TRANSITION);
+
+    // R12:
+    // The sensor shall change states from FAULT to TRANSITION when the autopilot is not requesting support (not request) and limits are not exceeded (not limits).
+    G (sen_state == SEN_FAULT && !request && !limits -> X sen_state == SEN_TRANSITION);
+
+    // R13:
+    // The sensor shall change states from TRANSITION to NOMINAL when the autopilot is requesting support (request) and the autopilot reports the correct active mode (mode).
+    G (sen_state == SEN_TRANSITION && request && mode -> X sen_state == SEN_NOMINAL);
   }
 
 }

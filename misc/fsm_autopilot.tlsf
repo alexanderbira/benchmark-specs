@@ -7,12 +7,14 @@ INFO {
 
 GLOBAL {
   DEFINITIONS {
+    // Autopilot state
     enum AP_STATE =
       AP_TRANSITION : 00
       AP_NOMINAL    : 01
       AP_STANDBY    : 10
       AP_MANEUVER   : 11;
     
+    // Sensor state
     enum SEN_STATE =
       SEN_NOMINAL    : 00
       SEN_TRANSITION : 01
@@ -26,7 +28,7 @@ MAIN {
     // Indication that the pilot is in control of the vehicle
     standby;
 
-    // Indication of an autopilot failure proficed by an external source
+    // Indication of an autopilot failure provided by an external source
     apfail;
 
     // Indication of general system health. Must be true to enable operation

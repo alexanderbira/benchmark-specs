@@ -1,0 +1,92 @@
+module FSMAutopilot
+
+// Autopilot state
+type AP_STATE = {TRANSITION, NOMINAL, STANDBY, MANEUVER};
+
+// Sensor state
+type SEN_STATE = {NOMINAL, TRANSITION, FAULT};
+
+
+// Indication that the pilot is in control of the vehicle
+env boolean standby;
+
+// Indication of an autopilot failure provided by an external source
+env boolean apfail;
+
+// Indication of general system health. Must be true to enable operation
+env boolean supported;
+
+// External indication to sensor on faulty condition impeding safe operation
+env boolean limits;
+
+
+// An autopilot's command to pull up
+sys boolean pullup;
+
+// Prior sensor output. Indicates a detected fault when false
+sys boolean good;
+
+// Internal variable indicating the autopilot is not in a transition state
+sys boolean mode;
+
+// Internal variable indicating transition to a nominal operation
+sys boolean request;
+
+// The autopilot state
+sys AP_STATE ap_state;
+
+// The autopilot's belief about its sensor state
+sys SEN_STATE sen_state;
+
+
+// R01:
+// Exceeding sensor limits shall latch an autopilot pullup when the pilot is not in control (not standby) and the system is supported without failures (not apfail).
+gar G (limits & !standby & supported & !apfail -> next (pullup));
+
+// R02:
+// The autopilot shall change states from TRANSITION to STANDBY when the pilot is in control (standby).
+gar G (ap_state = TRANSITION & standby -> next (ap_state = STANDBY));
+
+// R03:
+// The autopilot shall change states from TRANSITION to NOMINAL when the system is supported and sensor data is good.
+gar G (ap_state = TRANSITION & supported & good -> next (ap_state = NOMINAL));
+
+// R04:
+// The autopilot shall change states from NOMINAL to MANEUVER when the sensor data is not good.
+gar G (ap_state = NOMINAL & !good -> next (ap_state = MANEUVER));
+
+// R05:
+// The autopilot shall change states from NOMINAL to STANDBY when the pilot is in control (standby).
+gar G (ap_state = NOMINAL & standby -> next (ap_state = STANDBY));
+
+// R06:
+// The autopilot shall change states from MANEUVER to STANDBY when the pilot is in control (standby) and sensor data is good.
+gar G (ap_state = MANEUVER & standby & good -> next (ap_state = STANDBY));
+
+// R07:
+// The autopilot shall change states from [MANEUVER] to TRANSITION when the system is supported and sensor data is good.
+gar G (ap_state = MANEUVER & supported & good -> next (ap_state = TRANSITION));
+
+// R08:
+// The autopilot shall change states from STANDBY to TRANSITION when the pilot is not in control (not standby).
+gar G (ap_state = STANDBY & !standby -> next (ap_state = TRANSITION));
+
+// R09:
+// The autopilot shall change states from STANDBY to MANEUVER when a failure occurs (apfail).
+gar G (ap_state = STANDBY & apfail -> next (ap_state = MANEUVER));
+
+// R10:
+// The sensor shall change states from NOMINAL to FAULT when limits are exceeded.
+gar G (sen_state = NOMINAL & limits -> next (sen_state = FAULT));
+
+// R11:
+// The sensor shall change states from NOMINAL to TRANSITION when the autopilot is not requesting support (not request).
+gar G (sen_state = NOMINAL & !request -> next (sen_state = TRANSITION));
+
+// R12:
+// The sensor shall change states from FAULT to TRANSITION when the autopilot is not requesting support (not request) and limits are not exceeded (not limits).
+gar G (sen_state = FAULT & !request & !limits -> next (sen_state = TRANSITION));
+
+// R13:
+// The sensor shall change states from TRANSITION to NOMINAL when the autopilot is requesting support (request) and the autopilot reports the correct active mode (mode).
+gar G (sen_state = TRANSITION & request & mode -> next (sen_state = NOMINAL));

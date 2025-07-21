@@ -1,0 +1,37 @@
+{
+  "name": "FSM - Autopilot",
+  "type": "LTL",
+  "ins": [
+    "limits",
+    "supported",
+    "apfail",
+    "standby"
+  ],
+  "outs": [
+    "request",
+    "mode",
+    "good",
+    "pullup",
+    "sen_state_0",
+    "sen_state_1",
+    "ap_state_0",
+    "ap_state_1"
+  ],
+  "domains": [],
+  "goals": [
+    "(G ((! (sen_state_0)) || (! (sen_state_1))))",
+    "(G (((((limits) && (! (standby))) && (supported)) && (! (apfail))) -> (X (pullup))))",
+    "(G ((((! (ap_state_0)) && (! (ap_state_1))) && (standby)) -> (X ((ap_state_0) && (! (ap_state_1))))))",
+    "(G (((((! (ap_state_0)) && (! (ap_state_1))) && (supported)) && (good)) -> (X ((! (ap_state_0)) && (ap_state_1)))))",
+    "(G ((((! (ap_state_0)) && (ap_state_1)) && (! (good))) -> (X ((ap_state_0) && (ap_state_1)))))",
+    "(G ((((! (ap_state_0)) && (ap_state_1)) && (standby)) -> (X ((ap_state_0) && (! (ap_state_1))))))",
+    "(G (((((ap_state_0) && (ap_state_1)) && (standby)) && (good)) -> (X ((ap_state_0) && (! (ap_state_1))))))",
+    "(G (((((ap_state_0) && (ap_state_1)) && (supported)) && (good)) -> (X ((! (ap_state_0)) && (! (ap_state_1))))))",
+    "(G ((((ap_state_0) && (! (ap_state_1))) && (! (standby))) -> (X ((! (ap_state_0)) && (! (ap_state_1))))))",
+    "(G ((((ap_state_0) && (! (ap_state_1))) && (apfail)) -> (X ((ap_state_0) && (ap_state_1)))))",
+    "(G ((((! (sen_state_0)) && (! (sen_state_1))) && (limits)) -> (X ((sen_state_0) && (! (sen_state_1))))))",
+    "(G ((((! (sen_state_0)) && (! (sen_state_1))) && (! (request))) -> (X ((! (sen_state_0)) && (sen_state_1)))))",
+    "(G (((((sen_state_0) && (! (sen_state_1))) && (! (request))) && (! (limits))) -> (X ((! (sen_state_0)) && (sen_state_1)))))",
+    "(G (((((! (sen_state_0)) && (sen_state_1)) && (request)) && (mode)) -> (X ((! (sen_state_0)) && (! (sen_state_1))))))"
+  ]
+}

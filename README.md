@@ -35,6 +35,16 @@ A few Python utility scripts are provided for conversion to and from the above J
   - Uses implication format (`domains -> goals`) with the `-r` flag for realizability checking
   - Outputs results in format: `spec_name: REALIZABLE/UNREALIZABLE`
 
+- **`run_analysis.py`** - comprehensive analysis tool that extracts statistics from specification files and outputs to CSV
+  
+  Usage: `python run_analysis.py [directory] [output.csv]`
+  
+  - Analyzes all valid specification files in the directory (recursively)
+  - Extracts multiple metrics for each specification:
+    - Basic counts: domains, goals, environment/system variables
+    - Realizability: tests both `domains & goals` and `domains -> goals`
+    - Formula complexity: total and maximum variable/operator counts per formula
+
 ### Conversion Utilities
 
 - **`to_spectra.py`** - converts a JSON spec to a `.spectra` spec

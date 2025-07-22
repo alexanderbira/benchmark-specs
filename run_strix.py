@@ -4,7 +4,7 @@ import json
 import subprocess
 import argparse
 
-def run_strix_from_json(json_file, extra_args=None, capture_output=False):
+def run_strix_from_json(json_file, formula_type, extra_args=None, capture_output=False):
     import json
     import subprocess
 
@@ -14,8 +14,15 @@ def run_strix_from_json(json_file, extra_args=None, capture_output=False):
     with open(json_file, 'r') as f:
         spec = json.load(f)
 
-    all_formulas = map(lambda s: f"({s})", spec.get("domains", []) + spec.get("goals", []))
-    formula = ' & '.join(all_formulas)
+    all_domains = ' & '.join(map(lambda d: f"({d})", spec.get("domains", [])))
+    all_goals = ' & '.join(map(lambda g: f"({g})", spec.get("goals", [])))
+
+    if formula_type == "conjunction":
+        formula = f"({all_domains or 'true'}) & ({all_goals or 'true'})"
+    elif formula_type == "implication":
+        formula = f"({all_domains or 'true'}) -> ({all_goals or 'true'})"
+    else:
+        raise ValueError(f"Invalid formula type: {formula_type}. Must be 'conjunction' or 'implication'.")
 
     ins = ','.join(spec.get("ins", []))
     outs = ','.join(spec.get("outs", []))
@@ -36,6 +43,8 @@ def run_strix_from_json(json_file, extra_args=None, capture_output=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Strix with spec from JSON.", allow_abbrev=False)
     parser.add_argument("json_file", help="Path to the spec JSON file.")
+    parser.add_argument("formula_type", choices=["conjunction", "implication"], 
+                       help="Formula type: 'conjunction' for domains & goals, 'implication' for domains -> goals")
     args, extra_args = parser.parse_known_args()
 
-    print(run_strix_from_json(args.json_file, extra_args))
+    print(run_strix_from_json(args.json_file, args.formula_type, extra_args))

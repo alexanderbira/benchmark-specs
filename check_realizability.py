@@ -20,6 +20,7 @@ def traverse_and_run(directory):
                 if is_valid_spec_file(filepath):
                     name, output = run_strix_from_json(
                         filepath,
+                        "implication",
                         extra_args=["-r"],
                         capture_output=True
                     )

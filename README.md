@@ -17,13 +17,27 @@ Each test case is in the following JSON format:
 ## Utility Scripts
 A few Python utility scripts are provided for conversion to and from the above JSON format, as well as other operations.
 
-- `run_strix.py` - a wrapper for running [Strix](https://github.com/meyerphi/strix) from a JSON file
+### Core Utilities
+
+- **`run_strix.py`** - a wrapper for running [Strix](https://github.com/meyerphi/strix) from a JSON file
   
-  Usage: `python run_strix.py spec.json [strix flags]` (assumes Strix is installed)
-- `check_realizability.py` - a script for checking the realizability (with Strix) of every JSON spec in a directory
+  Usage: `python run_strix.py spec.json {conjunction|implication} [strix flags]`
+  
+  - `conjunction`: generates formula as `domains & goals`
+  - `implication`: generates formula as `domains -> goals`
+  - Assumes Strix is installed and available in PATH
+
+- **`check_realizability.py`** - batch realizability checking script that runs Strix on all valid JSON specs in a directory
   
   Usage: `python check_realizability.py [directory]`
-- `to_spectra.py` - a script for converting a JSON spec to a `.spectra` spec
+  
+  - Automatically finds all valid specification files in the directory (recursively)
+  - Uses implication format (`domains -> goals`) with the `-r` flag for realizability checking
+  - Outputs results in format: `spec_name: REALIZABLE/UNREALIZABLE`
+
+### Conversion Utilities
+
+- **`to_spectra.py`** - converts a JSON spec to a `.spectra` spec
   
   Usage: `python to_spectra.py spec.json`
 

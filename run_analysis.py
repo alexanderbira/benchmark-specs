@@ -97,6 +97,7 @@ class SpecAnalyzer:
         # All analyzers are defined here - add new ones to this dict
         result = {
             "name": spec_content.get("name", "unknown"),
+            "type": spec_content["type"],
             "num_domains": len(spec_content.get("domains", [])),
             "num_goals": len(spec_content.get("goals", [])),
             "num_env_vars": len(spec_content.get("ins", [])),

@@ -27,6 +27,8 @@ A few Python utility scripts are provided for conversion to and from the above J
   - `implication`: generates formula as `domains -> goals`
   - Assumes Strix is installed and available in PATH
 
+### Specification Analysis
+
 - **`check_realizability.py`** - batch realizability checking script that runs Strix on all valid JSON specs in a directory
   
   Usage: `python check_realizability.py [directory]`
@@ -44,6 +46,18 @@ A few Python utility scripts are provided for conversion to and from the above J
     - Basic counts: domains, goals, environment/system variables
     - Realizability: tests both `domains & goals` and `domains -> goals`
     - Formula complexity: total and maximum variable/operator counts per formula
+
+- **`ubc_checker.py`** - boundary condition checker which checks if a user-provided formula is a boundary condition (BC) or unavoidable boundary condition (UBC) for a given specification. Uses black-sat for SAT solving and Strix for realizability checking.
+
+  Usage: `python ubc_checker.py spec.json "user_formula"`
+
+  - Checks inconsistency, minimality, non-triviality, and unavoidability
+    - Inconsistency: whether `domains ∧ goals ∧ user_formula` is UNSAT
+    - Minimality: whether removing any single goal makes the conjunction SAT
+    - Non-triviality: whether `user_formula` is NOT equivalent to `!(goal_conjunction)`
+    - Unavoidability: whether `domains → ¬(user_formula)` is unrealizable
+  - Determines boundary condition status: inconsistent AND minimal AND non-trivial
+  - Determines unavoidable boundary condition: boundary condition AND unavoidable
 
 ### Conversion Utilities
 

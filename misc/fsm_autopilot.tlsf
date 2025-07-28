@@ -36,14 +36,14 @@ MAIN {
 
     // External indication to sensor on faulty condition impeding safe operation
     limits;
+
+    // Prior sensor output. Indicates a detected fault when false
+    good;
   }
 
   OUTPUTS {
     // An autopilot's command to pull up
     pullup;
-
-    // Prior sensor output. Indicates a detected fault when false
-    good;
 
     // Internal variable indicating the autopilot is not in a transition state
     mode;

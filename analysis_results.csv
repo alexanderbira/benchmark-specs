@@ -1,5 +1,5 @@
 name,type,num_domains,num_goals,num_env_vars,num_sys_vars,realizable_conjunction,realizable_implication,total_formula_vars,longest_formula_vars,total_formula_ops,longest_formula_ops
-FSM - Autopilot,LTL,0,14,4,8,REALIZABLE,REALIZABLE,72,6,121,11
+FSM - Autopilot,LTL,0,14,5,7,UNREALIZABLE,UNREALIZABLE,72,6,121,11
 Liquid Mixing System,LTL,0,7,6,6,UNREALIZABLE,UNREALIZABLE,25,5,38,10
 Parameterized Load Balancer,LTL,3,7,3,2,UNREALIZABLE,REALIZABLE,25,5,50,10
 AMBA AHB Case Study,LTL,10,27,7,9,UNREALIZABLE,REALIZABLE,136,21,250,43

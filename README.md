@@ -60,6 +60,13 @@ A few Python utility scripts are provided for conversion to and from the above J
   - Determines boundary condition status: inconsistent AND minimal AND non-trivial
   - Determines unavoidable boundary condition: boundary condition AND unavoidable
 
+- **`refinement_ubc_checker.py`** - batch boundary condition checker for interpolation refinements. Processes CSV files from interpolation nodes and checks each refinement as a potential boundary condition candidate.
+
+  Usage: `python refinement_ubc_checker.py spec.json interpolation_nodes.csv [--summary-only]`
+
+  - Extracts refinements from CSV rows where `is_realizable` is True
+  - For each refinement formula, negates it and runs UBC checker to determine if it's a BC or UBC
+
 ### Conversion Utilities
 
 - **`to_spectra.py`** - converts a JSON spec to a `.spectra` spec

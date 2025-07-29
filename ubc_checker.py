@@ -43,38 +43,34 @@ def check_sat(formula: str) -> bool:
     return result.stdout.strip().upper() == "SAT"
 
 
-def main():
-    """Simple CLI interface."""
-    parser = argparse.ArgumentParser(description="Check if a given formula is a (U)BC for a given spec")
-    parser.add_argument('json_file', help='Path to the JSON specification file')
-    parser.add_argument('formula', help='User-inputted formula string (BC)')
+def check_boundary_condition(json_file_path: str, formula: str) -> list:
+    """
+    Check if a given formula is a (U)BC for a given spec.
     
-    args = parser.parse_args()
+    Args:
+        json_file_path: Path to the JSON specification file
+        formula: User-inputted formula string (BC candidate)
     
+    Returns:
+        List of [inconsistency, minimality, non_triviality, unavoidability, BC, UBC]
+    """
     # Load the spec data
-    spec_data = load_spec_file(args.json_file)
+    spec_data = load_spec_file(json_file_path)
     domains = spec_data.get('domains', [])
     goals = spec_data.get('goals', [])
-    user_formula = args.formula
+    user_formula = formula
     input_vars = spec_data.get('ins', [])
     output_vars = spec_data.get('outs', [])
-    
-    print(f"Loaded {len(domains)} domain formulae")
-    print(f"Loaded {len(goals)} goal formulae")
-    print()
-    print(f"BC candidate: {user_formula}")
-    print()
     
     # 1. Check inconsistency: domains ∧ goals ∧ user_formula is UNSAT
     all_formulae = domains + goals + [user_formula] if user_formula.strip() else domains + goals
     conjunction = " & ".join(f"({formula})" for formula in all_formulae)
     
     inconsistent = not check_sat(conjunction)
-    print(f"Inconsistency: {inconsistent}")
     
     # 2. Check minimality: removing any single goal makes the conjunction SAT
     minimal = True
-    if inconsistent and goals:
+    if goals:
         for i in range(len(goals)):
             goals_without_i = goals[:i] + goals[i+1:]
             test_formulae = domains + goals_without_i + [user_formula] if user_formula.strip() else domains + goals_without_i
@@ -84,20 +80,11 @@ def main():
                 minimal = False
                 break
     
-    if inconsistent:
-        print(f"Minimality: {minimal}")
-    else:
-        print("Minimality: False")
-        minimal = False
-    
     # 3. Check non-triviality: user_formula is NOT equivalent to !(goal_conjunction)
     non_trivial = True
     if goals:
         goal_conjunction = " & ".join(f"({goal})" for goal in goals)
         non_trivial = check_sat(f"!(({format_formula_black_sat(user_formula)}) <-> (!({format_formula_black_sat(goal_conjunction)})))")
-    
-    print(f"Non-triviality: {non_trivial}")
-
 
     # 4. Check unavoidability: domains -> !(user_formula) is unrealizable
     spec = {
@@ -118,14 +105,42 @@ def main():
     except Exception:
         pass
     
-    print(f"Unavoidability: {unavoidable}")
-
-    print()
-    
     # 5. Determine boundary condition status
     is_boundary_condition = inconsistent and minimal and non_trivial
-    print(f"BC: {is_boundary_condition}")
-    print(f"UBC: {is_boundary_condition and unavoidable}")
+    is_unavoidable_boundary_condition = is_boundary_condition and unavoidable
+    
+    return [inconsistent, minimal, non_trivial, unavoidable, is_boundary_condition, is_unavoidable_boundary_condition]
+
+
+def main():
+    """Simple CLI interface."""
+    parser = argparse.ArgumentParser(description="Check if a given formula is a (U)BC for a given spec")
+    parser.add_argument('json_file', help='Path to the JSON specification file')
+    parser.add_argument('formula', help='User-inputted formula string (BC)')
+    
+    args = parser.parse_args()
+    
+    # Load spec data for display
+    spec_data = load_spec_file(args.json_file)
+    domains = spec_data.get('domains', [])
+    goals = spec_data.get('goals', [])
+    
+    print(f"Loaded {len(domains)} domain formulae")
+    print(f"Loaded {len(goals)} goal formulae")
+    print()
+    print(f"BC candidate: {args.formula}")
+    print()
+    
+    # Get results from the analysis function
+    inconsistent, minimal, non_trivial, unavoidable, is_bc, is_ubc = check_boundary_condition(args.json_file, args.formula)
+    
+    print(f"Inconsistency: {inconsistent}")
+    print(f"Minimality: {minimal}")
+    print(f"Non-triviality: {non_trivial}")
+    print(f"Unavoidability: {unavoidable}")
+    print()
+    print(f"BC: {is_bc}")
+    print(f"UBC: {is_ubc}")
 
 if __name__ == '__main__':
     main()

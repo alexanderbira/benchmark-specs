@@ -1,6 +1,6 @@
 {
   "name": "FSM - Autopilot",
-  "type": "LTL",
+  "type": "GR(1)",
   "ins": [
     "good",
     "limits",

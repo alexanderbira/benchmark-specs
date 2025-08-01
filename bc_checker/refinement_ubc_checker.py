@@ -8,7 +8,7 @@ import csv
 import ast
 import spot
 from typing import List, Tuple
-from ubc_checker import find_ubc_subgoals
+from bc_checker.ubc_checker import find_ubc_subgoals
 from spec_utils import load_spec_file
 
 
@@ -168,6 +168,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# !(G ((good & !ap_state_0 & supported & !ap_state_1) -> X(!(!good & standby))))
-# 

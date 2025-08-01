@@ -6,8 +6,10 @@ CLI tool to check refinements from FSM interpolation CSV files using the UBC che
 import argparse
 import csv
 import ast
+import spot
 from typing import List, Tuple
-from ubc_checker import check_boundary_condition
+from ubc_checker import find_ubc_subgoals
+from spec_utils import load_spec_file
 
 
 def process_refinement_formula(formula: str) -> str:
@@ -36,6 +38,23 @@ def extract_realizable_refinements(csv_file_path: str) -> List[Tuple[str, str, L
                     results.append((row['node_id'], row['refinement'], refinements))
     return results
 
+def unique_formulas(formulas: List[str]) -> List[str]:
+    """Return unique formulas from a list (remove equivalent formulas)."""
+    unique = []
+    
+    for formula in formulas:
+        
+        is_equivalent = False
+        for existing in unique:
+            if spot.are_equivalent(formula, existing):
+                is_equivalent = True
+                break
+        
+        if not is_equivalent:
+            unique.append(formula)
+    
+    return unique
+
 
 def main():
     """CLI interface for checking refinements with UBC checker."""
@@ -52,6 +71,13 @@ def main():
     print(f"Loading refinements from: {args.csv_file}")
     print(f"Using spec file: {args.json_spec}")
     print()
+    
+    # Load spec data once
+    spec_data = load_spec_file(args.json_spec)
+    domains = spec_data.get('domains', [])
+    goals = spec_data.get('goals', [])
+    input_vars = spec_data.get('ins', [])
+    output_vars = spec_data.get('outs', [])
     
     # Extract realizable refinements
     realizable_refinements = extract_realizable_refinements(args.csv_file)
@@ -70,18 +96,23 @@ def main():
     for node_id, _, refinement_list in realizable_refinements:
         if not args.summary_only:
             print(f"Node: {node_id}")
-
-        # refinement_list = [" | ".join(map(lambda x: f"({x})", refinement_list))] # Uncomment to test whole set as one formula
         
         for i, refinement in enumerate(refinement_list):
             processed_formula = process_refinement_formula(refinement)
             
             try:
-                _, _, _, _, is_bc, is_ubc = check_boundary_condition(args.json_spec, processed_formula)
+                result = find_ubc_subgoals(domains, goals, processed_formula, input_vars, output_vars)
+                
+                if result is None:
+                    is_bc = is_ubc = False
+                    subset_goals = []
+                else:
+                    subset_goals, is_bc, is_ubc = result
                 
                 results.append({
                     'node_id': node_id, 'refinement_index': i, 'original_formula': refinement,
-                    'processed_formula': processed_formula, 'is_bc': is_bc, 'is_ubc': is_ubc
+                    'processed_formula': processed_formula, 'is_bc': is_bc, 'is_ubc': is_ubc,
+                    'subset_goals': subset_goals
                 })
                 
                 bc_count += is_bc
@@ -90,6 +121,8 @@ def main():
                 if not args.summary_only:
                     print(f"  Refinement: {refinement}")
                     print(f"  BC candidate: {processed_formula}")
+                    if result:
+                        print(f"  Goal subset: {subset_goals}")
                     print(f"  Result: {'UBC' if is_ubc else 'Avoidable BC' if is_bc else 'Not a BC/UBC'}")
                     print()
                 
@@ -121,15 +154,20 @@ def main():
     ubcs = [r for r in results if r.get('is_ubc')]
     
     if bcs:
-        print(f"\nBoundary conditions:")
-        for r in bcs:
-            print(f"  {r['processed_formula']}")
+        unique_bc_formulas = unique_formulas([r['processed_formula'] for r in bcs])
+        print(f"\nUnique boundary conditions ({len(unique_bc_formulas)}):")
+        for formula in unique_bc_formulas:
+            print(f"  {formula}")
     
     if ubcs:
-        print(f"\nUnavoidable boundary conditions:")
-        for r in ubcs:
-            print(f"  {r['processed_formula']}")
+        unique_ubc_formulas = unique_formulas([r['processed_formula'] for r in ubcs])
+        print(f"\nUnique unavoidable boundary conditions ({len(unique_ubc_formulas)}):")
+        for formula in unique_ubc_formulas:
+            print(f"  {formula}")
 
 
 if __name__ == '__main__':
     main()
+
+# !(G ((good & !ap_state_0 & supported & !ap_state_1) -> X(!(!good & standby))))
+# 

@@ -4,3 +4,8 @@
 __pycache__
 
 .vscode
+
+# Experiment logs and outputs
+results
+temp
+interpolation-outputs

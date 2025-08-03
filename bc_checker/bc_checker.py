@@ -3,13 +3,17 @@
 Main boundary condition checker class that coordinates candidate generation and goal set testing.
 """
 
-from typing import List, Dict, Any, Optional
+import sys
 from pathlib import Path
+from typing import List, Dict, Any, Optional
+
+# Add parent directory to path to import from root
+sys.path.append(str(Path(__file__).parent.parent))
 
 from spec_utils import load_spec_file
 from bc_candidate_generator import BCCandidateGenerator
 from goal_set_generator import GoalSetGenerator
-from bc_checker.ubc_checker import is_ubc
+from ubc_checker import is_ubc
 
 
 class BCResult:

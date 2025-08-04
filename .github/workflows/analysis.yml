@@ -1,0 +1,116 @@
+name: Specification Analysis
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/specs/**'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Strix
+      run: |
+        wget https://github.com/meyerphi/strix/releases/download/21.0.0/strix-21.0.0-1-x86_64-linux.tar.gz
+        tar -xzf strix-21.0.0-1-x86_64-linux.tar.gz
+        sudo mv ./strix /usr/local/bin/
+        sudo chmod +x /usr/local/bin/strix
+        strix --version
+        
+    - name: Cache setup
+      uses: actions/cache@v3
+      with:
+        path: |
+          /usr/local/bin/strix
+        key: strix-21.0.0
+        
+  analysis:
+    needs: setup
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Restore Strix cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          /usr/local/bin/strix
+        key: strix-21.0.0
+        
+    - name: Install Strix (if cache miss)
+      run: |
+        if [ ! -f /usr/local/bin/strix ]; then
+          wget https://github.com/meyerphi/strix/releases/download/21.0.0/strix-21.0.0-1-x86_64-linux.tar.gz
+          tar -xzf strix-21.0.0-1-x86_64-linux.tar.gz
+          sudo mv ./strix /usr/local/bin/
+          sudo chmod +x /usr/local/bin/strix
+        fi
+        
+    - name: Run analysis
+      run: python run_analysis.py . analysis_results.csv
+        
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: analysis-results
+        path: analysis_results.csv
+        
+  summary:
+    needs: analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download results
+      uses: actions/download-artifact@v4
+      with:
+        name: analysis-results
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install pandas
+      run: pip install pandas tabulate
+        
+    - name: Create summary
+      run: |
+        python3 -c "
+        import pandas as pd
+        
+        # Read CSV and create markdown summary
+        df = pd.read_csv('analysis_results.csv')
+        total_specs = len(df)
+        
+        with open('summary_content.md', 'w') as f:
+            f.write('# Specification Analysis Results\\n\\n')
+            f.write(f'**Total specifications analyzed:** {total_specs}\\n\\n')
+            f.write('## Analysis Results Table\\n\\n')
+            df.to_markdown(buf=f, index=False, tablefmt='github')
+            f.write('\\n\\n## Raw CSV Output\\n\\n')
+            f.write('\`\`\`csv\\n')
+            with open('analysis_results.csv', 'r') as csv_file:
+                f.write(csv_file.read())
+            f.write('\`\`\`\\n')
+        "
+        
+        # Append the generated content to GitHub step summary
+        cat summary_content.md >> $GITHUB_STEP_SUMMARY

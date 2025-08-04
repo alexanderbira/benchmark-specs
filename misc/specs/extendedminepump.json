@@ -1,0 +1,20 @@
+{
+  "name": "extendedminepump",
+  "type": "LTL",
+  "ins": [
+    "h",
+    "m"
+  ],
+  "outs": [
+    "p",
+    "ext"
+  ],
+  "domains": [
+    "G((p && X(p)) -> X(X(! h)))",
+    "G(ext -> !m)"
+  ],
+  "goals": [
+    "G(h -> X(p))",
+    "G(m -> X(! p))"
+  ]
+}

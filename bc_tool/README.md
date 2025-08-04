@@ -10,7 +10,7 @@ Call the CLI through `python bc_checker/cli.py`. The `-h` option provides detail
 
 For example, to find BCs using outputs from interpolation, checking all goal subsets with at most 3 goals:
 ```bash
-python bc_checker/cli.py spec.json interpolation all-subsets --max-goals 3 --interpolation-csv refinement_nodes.csv
+python bc_tool/cli.py spec.json interpolation all-subsets --max-goals 3 --interpolation-csv refinement_nodes.csv
 ```
 
 ## Architecture

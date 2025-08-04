@@ -14,21 +14,22 @@ def is_ubc(domains, goals, user_formula, input_vars, output_vars):
     # 1. Check inconsistency: domains ∧ goals ∧ user_formula is UNSAT
     all_formulae = domains + goals + [user_formula] if user_formula.strip() else domains + goals
     conjunction = " & ".join(f"({formula})" for formula in all_formulae)
-    
+
     inconsistent = not check_sat(conjunction)
-    
+
     # 2. Check minimality: removing any single goal makes the conjunction SAT
     minimal = True
     if goals:
         for i in range(len(goals)):
-            goals_without_i = goals[:i] + goals[i+1:]
-            test_formulae = domains + goals_without_i + [user_formula] if user_formula.strip() else domains + goals_without_i
+            goals_without_i = goals[:i] + goals[i + 1:]
+            test_formulae = domains + goals_without_i + [
+                user_formula] if user_formula.strip() else domains + goals_without_i
             test_conjunction = " & ".join(f"({formula})" for formula in test_formulae)
-            
+
             if not check_sat(test_conjunction):  # Still UNSAT after removing this goal
                 minimal = False
                 break
-    
+
     # 3. Check non-triviality: user_formula is NOT equivalent to !(goal_conjunction)
     non_trivial = True
     if goals:
@@ -38,13 +39,13 @@ def is_ubc(domains, goals, user_formula, input_vars, output_vars):
     # 4. Check unavoidability: domains -> !(user_formula) is unrealizable
     spec = {
         "name": "unavoidability_check",
-        "type": "LTL", 
+        "type": "LTL",
         "ins": input_vars,
         "outs": output_vars,
         "domains": [domain for domain in domains],
         "goals": [f"!({user_formula})"]
     }
-    
+
     unavoidable = False
     try:
         result = run_strix_from_spec(spec, "implication", ["-r"], capture_output=True)
@@ -53,9 +54,9 @@ def is_ubc(domains, goals, user_formula, input_vars, output_vars):
             unavoidable = "UNREALIZABLE" in output.upper()
     except Exception:
         pass
-    
+
     # 5. Determine boundary condition status
     is_boundary_condition = inconsistent and minimal and non_trivial
     is_unavoidable_boundary_condition = is_boundary_condition and unavoidable
-    
+
     return [inconsistent, minimal, non_trivial, unavoidable, is_boundary_condition, is_unavoidable_boundary_condition]

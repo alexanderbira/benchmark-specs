@@ -1,5 +1,5 @@
 from typing import List, Iterator
-from ..goal_set_generator import GoalSetGenerator
+from bc_tool.goal_set_generator import GoalSetGenerator
 
 
 class FullGoalSetGenerator(GoalSetGenerator):

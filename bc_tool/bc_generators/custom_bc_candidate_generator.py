@@ -1,5 +1,5 @@
 from typing import List, Iterator
-from ..bc_candidate_generator import BCCandidateGenerator
+from bc_tool.bc_candidate_generator import BCCandidateGenerator
 
 
 class CustomBCCandidateGenerator(BCCandidateGenerator):

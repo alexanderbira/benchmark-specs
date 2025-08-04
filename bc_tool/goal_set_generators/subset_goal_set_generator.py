@@ -1,6 +1,6 @@
 from typing import List, Iterator
 from itertools import combinations
-from ..goal_set_generator import GoalSetGenerator
+from bc_tool.goal_set_generator import GoalSetGenerator
 
 
 class SubsetGoalSetGenerator(GoalSetGenerator):

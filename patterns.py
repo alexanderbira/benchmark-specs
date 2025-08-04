@@ -1,5 +1,6 @@
 # Utility for matching LTL formulas against predefined patterns
 
+import re
 from pylogics.parsers import parse_ltl
 from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic
 from pylogics.syntax.base import Implies, And, Or, Not
@@ -93,7 +94,6 @@ def fill_pattern(pattern: str, variables: dict):
     :param variables: A dictionary of matched variables.
     :return: The filled pattern string.
     """
-    import re
     match = re.search(r'\(([^)]*)\)', pattern)
     if match:
         arg_str = match.group(1)

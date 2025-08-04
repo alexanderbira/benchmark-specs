@@ -4,6 +4,7 @@
 __pycache__
 
 .vscode
+.idea
 
 # Experiment logs and outputs
 results

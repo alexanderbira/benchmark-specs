@@ -111,30 +111,3 @@ class FullGoalSetGenerator(GoalSetGenerator):
         """
         if goals:
             yield goals
-
-
-class CustomGoalSetGenerator(GoalSetGenerator):
-    """Generate goal sets from predefined custom sets."""
-    
-    def __init__(self, goal_sets: List[List[str]]):
-        """Initialize with custom goal sets.
-        
-        Args:
-            goal_sets: Predefined sets of goal formulas
-        """
-        self.goal_sets = goal_sets
-    
-    def generate_goal_sets(self, goals: List[str]) -> Iterator[List[str]]:
-        """Generate predefined custom goal sets.
-        
-        Args:
-            goals: Complete list of goal formulas (used for validation)
-            
-        Yields:
-            List[str]: Custom goal sets that are valid subsets
-        """
-        goal_set = set(goals)
-        for custom_set in self.goal_sets:
-            # Only yield sets that are valid subsets of the available goals
-            if set(custom_set).issubset(goal_set):
-                yield custom_set

@@ -7,6 +7,8 @@ import argparse
 import subprocess
 import datetime
 import sys
+import io
+import json
 from pathlib import Path
 
 from bc_checker import BoundaryConditionChecker
@@ -94,8 +96,7 @@ def print_execution_info(args, checker: BoundaryConditionChecker):
     print("=" * 80)
 
 
-def main():
-    """CLI for the BC checker system."""
+def parse_args():
     parser = argparse.ArgumentParser(description="Boundary Condition Checker")
 
     # Required positional arguments
@@ -134,49 +135,91 @@ def main():
     # Validate required arguments based on chosen methods
     if args.bc_generator == 'interpolation' and not args.interpolation_csv:
         print("Error: --interpolation-csv is required when using 'interpolation' method")
-        return 1
+        exit(1)
     if args.bc_generator == 'custom' and not args.custom_formulas:
         print("Error: --custom-formulas is required when using 'custom' method")
-        return 1
+        exit(1)
     if args.goal_generator == 'indices' and not args.goal_indices:
         print("Error: --goal-indices is required when using 'indices' method")
-        return 1
+        exit(1)
 
-    # Create candidate generator
+    return args
+
+
+def create_candidate_generator(args):
     if args.bc_generator == 'interpolation':
-        candidate_generator = InterpolationBCCandidateGenerator(args.interpolation_csv)
+        return InterpolationBCCandidateGenerator(args.interpolation_csv)
     elif args.bc_generator == 'patterns':
-        candidate_generator = PatternBCCandidateGenerator(max_atoms=args.max_atoms)
-    else:  # custom
-        candidate_generator = CustomBCCandidateGenerator(args.custom_formulas)
+        return PatternBCCandidateGenerator(max_atoms=args.max_atoms)
+    else:
+        return CustomBCCandidateGenerator(args.custom_formulas)
 
-    # Create goal set generator
+
+def create_goal_set_generator(args):
     if args.goal_generator == 'single':
-        goal_generator = SingleGoalSetGenerator()
+        return SingleGoalSetGenerator()
     elif args.goal_generator == 'full':
-        goal_generator = FullGoalSetGenerator()
+        return FullGoalSetGenerator()
     elif args.goal_generator == 'indices':
-        # Parse multiple index sets from space-separated arguments
         index_sets = []
         for arg in args.goal_indices:
             try:
-                # Split by comma and convert to integers
                 indices = [int(x.strip()) for x in arg.split(',')]
                 index_sets.append(indices)
             except ValueError:
                 print(f"Error: Invalid goal indices format '{arg}'. Use comma-separated integers.")
-                return 1
-        goal_generator = IndexBasedGoalSetGenerator(index_sets)
-    else:  # all-subsets
-        goal_generator = SubsetGoalSetGenerator(max_subset_size=args.max_subset_size)
+                exit(1)
+        return IndexBasedGoalSetGenerator(index_sets)
+    else:
+        return SubsetGoalSetGenerator(max_subset_size=args.max_subset_size)
 
-    # Create and run BC checker
+
+def setup_output_capture():
+    output_buffer = io.StringIO()
+    sys_stdout = sys.stdout
+    sys_stderr = sys.stderr
+
+    class Tee(io.StringIO):
+        def __init__(self, *streams):
+            super().__init__()
+            self.streams = streams
+
+        def write(self, s):
+            for stream in self.streams:
+                stream.write(s)
+            super().write(s)
+
+        def flush(self):
+            for stream in self.streams:
+                stream.flush()
+            super().flush()
+
+    tee = Tee(sys_stdout, output_buffer)
+    sys.stdout = tee
+    sys.stderr = tee
+    return output_buffer, sys_stdout, sys_stderr
+
+
+def main():
+    args = parse_args()
+    candidate_generator = create_candidate_generator(args)
+    goal_generator = create_goal_set_generator(args)
+    output_buffer, sys_stdout, sys_stderr = setup_output_capture()
+    spec_name = "unknown_spec"
     try:
         checker = BoundaryConditionChecker(
             spec_file_path=args.spec_file,
             candidate_generator=candidate_generator,
             goal_set_generator=goal_generator
         )
+
+        # Extract spec name from JSON
+        try:
+            with open(args.spec_file, 'r') as f:
+                spec_data = json.load(f)
+                spec_name = spec_data.get('name', Path(args.spec_file).stem)
+        except Exception:
+            spec_name = Path(args.spec_file).stem
 
         # Show specification info if not quiet
         if not args.quiet:
@@ -208,9 +251,26 @@ def main():
 
     except Exception as e:
         print(f"Error: {e}")
+        sys.stdout = sys_stdout
+        sys.stderr = sys_stderr
+        # Save output even on error
+        save_cli_output(output_buffer.getvalue(), spec_name)
         return 1
-
+    sys.stdout = sys_stdout
+    sys.stderr = sys_stderr
+    save_cli_output(output_buffer.getvalue(), spec_name)
     return 0
+
+
+def save_cli_output(output: str, spec_name: str):
+    from datetime import datetime
+    results_dir = Path(__file__).parent.parent / "results"
+    results_dir.mkdir(exist_ok=True)
+    dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{spec_name}_{dt_str}.txt"
+    file_path = results_dir / filename
+    with open(file_path, "w") as f:
+        f.write(output)
 
 
 if __name__ == '__main__':

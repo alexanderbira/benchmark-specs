@@ -6,6 +6,7 @@ Main boundary condition checker class that coordinates candidate generation and 
 import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+import spot
 
 # Add parent directory to path to import from root
 sys.path.append(str(Path(__file__).parent.parent))
@@ -155,6 +156,12 @@ class BoundaryConditionChecker:
                     continue
 
         if verbose:
+            print("Finished testing all candidates.")
+            print("Filtering results...")
+        # Filter out BCs implied by other BCs and to remove duplicates
+        results = self._filter_results(results)
+
+        if verbose:
             print(f"\n" + "=" * 80)
             print(f"SUMMARY")
             print(f"=" * 80)
@@ -195,3 +202,89 @@ class BoundaryConditionChecker:
             'input_vars': self.input_vars,
             'output_vars': self.output_vars
         }
+
+    def _filter_results(self, results):
+        """Filter out boundary conditions that are logically implied by others using Spot.
+
+        Args:
+            results: List of BCResult objects to filter
+
+        Returns:
+            Filtered list of BCResult objects with implied BCs removed
+        """
+        # Group results by goal subset
+        goal_subset_map = {}
+        for result in results:
+            goal_subset_key = tuple(sorted(result.goal_subset))
+            if goal_subset_key not in goal_subset_map:
+                goal_subset_map[goal_subset_key] = []
+            goal_subset_map[goal_subset_key].append(result)
+
+        # Filter out BCs implied by others
+        filtered_results = []
+
+        for goal_subset_key, group in goal_subset_map.items():
+            if len(group) <= 1:
+                # No need to filter if there's only one result for this goal subset
+                filtered_results.extend(group)
+                continue
+
+            # For each group with the same goal subset, check for implications
+            minimal_results = []
+
+            for i, result_a in enumerate(group):
+                is_implied = False
+
+                # Check if result_a is implied by any other result in the group
+                for j, result_b in enumerate(group):
+                    if i == j:
+                        continue
+
+                    # Use Spot to check if result_b.candidate implies result_a.candidate
+                    if self._spot_implies(result_b.candidate, result_a.candidate):
+                        is_implied = True
+                        break
+
+                if not is_implied:
+                    # result_a is not implied by any other result, so keep it
+                    # But first, remove any existing results that are now implied by result_a
+                    minimal_results = [
+                        r for r in minimal_results
+                        if not self._spot_implies(result_a.candidate, r.candidate)
+                    ]
+                    minimal_results.append(result_a)
+
+            filtered_results.extend(minimal_results)
+
+        return filtered_results
+
+    def _spot_implies(self, formula_a: str, formula_b: str) -> bool:
+        """Check if formula_a implies formula_b using Spot.
+
+        Args:
+            formula_a: The antecedent formula
+            formula_b: The consequent formula
+
+        Returns:
+            True if formula_a implies formula_b, False otherwise
+        """
+        try:
+            # Parse formulas using Spot
+            f_a = spot.formula(formula_a)
+            f_b = spot.formula(formula_b)
+
+            # Check if A implies B by checking if (A & !B) is unsatisfiable
+            # This is equivalent to checking if A -> B is a tautology
+            not_f_b = spot.formula.Not(f_b)
+            implication_check = spot.formula.And([f_a, not_f_b])
+
+            # Convert to automaton and check if it's empty (unsatisfiable)
+            aut = spot.translate(implication_check)
+            return aut.is_empty()
+
+        except Exception as e:
+            # If there's an error parsing or checking, assume no implication
+            # This is a conservative approach that keeps both formulas
+
+            print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
+            return False

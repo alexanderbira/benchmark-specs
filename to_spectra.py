@@ -6,10 +6,14 @@ import os
 import sys
 import re
 from patterns import find_pattern
+from remove_weak_until import remove_weak_until
 
 
 def transform_expression(expr):
     """Transform an LTL expression using both pattern matching and basic transformations."""
+    # Remove weak until operators
+    expr = remove_weak_until(expr)
+
     # Apply pattern matching transformation (returns the original formula if no pattern matches)
     expr = find_pattern(expr)
 
@@ -70,7 +74,6 @@ def json_to_spectra(input_path):
     with open('DwyerPatterns.spectra', 'r') as dwyer_file:
         dwyer_content = dwyer_file.read()
         output += '\n' + dwyer_content
-
 
     # Create translated directory if it doesn't exist
     translated_dir = "translated"

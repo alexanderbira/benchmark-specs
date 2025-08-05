@@ -2,7 +2,7 @@
 
 import re
 from pylogics.parsers import parse_ltl
-from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic
+from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext
 from pylogics.syntax.base import Implies, And, Or, Not
 from extracted_patterns import patterns
 
@@ -69,7 +69,7 @@ def formula_to_string(formula):
         return f"({formula_to_string(formula.operands[0])} U {formula_to_string(formula.operands[1])})"
     elif isinstance(formula, Release):
         return f"({formula_to_string(formula.operands[0])} R {formula_to_string(formula.operands[1])})"
-    elif isinstance(formula, Next):
+    elif isinstance(formula, Next) or isinstance(formula, WeakNext):
         return f"(X {formula_to_string(formula.argument)})"
     elif isinstance(formula, Implies):
         return f"({formula_to_string(formula.operands[0])} -> {formula_to_string(formula.operands[1])})"
@@ -82,6 +82,7 @@ def formula_to_string(formula):
     else:
         if hasattr(formula, 'argument'):
             # If the formula has operands, recursively convert them
+            print(f"Don't know how to convert {type(formula)} to string")
             return f"(??? {formula_to_string(formula.argument)})"
         return "(" + " ??? ".join([formula_to_string(op) for op in formula.operands]) + ")"
 

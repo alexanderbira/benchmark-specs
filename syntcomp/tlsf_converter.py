@@ -33,7 +33,7 @@ def get_type(file_path):
     return "LTL"
 
 def get_bosy_json(file_path):
-    raw_json = run_command(["-f", "bosy"], file_path)
+    raw_json = run_command(["-f", "bosy", "-nw"], file_path)
     return json.loads(raw_json)
 
 def process_file(file_path):

@@ -2,8 +2,8 @@
 
 import re
 from pylogics.parsers import parse_ltl
-from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext
-from pylogics.syntax.base import Implies, And, Or, Not
+from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext, PropositionalTrue, PropositionalFalse
+from pylogics.syntax.base import Implies, And, Or, Not, Equivalence
 from extracted_patterns import patterns
 
 
@@ -11,12 +11,13 @@ from extracted_patterns import patterns
 # Atomics in the patterns are placeholders for sub-formulas
 # Returns the matched formula or None if no match is found
 # E.g. match_pattern("G ((G x) -> F(y || x))", "G (P -> F Q)") -> {"P": "G x", "Q": "y || x"}
-def match_pattern(formula: str, pattern_formula: str):
+def match_pattern(formula: str, pattern_formula: str, stringifier):
     """
     Match a formula against a pattern formula.
 
     :param formula: The LTL formula to match.
     :param pattern_formula: The pattern formula to match against.
+    :param stringifier: A function to convert the formula to a string representation.
     :return: A dictionary of matched variables or None if no match is found.
     """
     # Parse the formula and the pattern formula
@@ -30,7 +31,7 @@ def match_pattern(formula: str, pattern_formula: str):
     def match_recursive(formula, pattern):
         if isinstance(pattern, Atomic):
             # If the pattern is atomic, we assume it matches the formula
-            variables[pattern.name] = formula_to_string(formula)
+            variables[pattern.name] = stringifier(formula)
             return True
         elif isinstance(formula, type(pattern)):
             # If both are of the same type, check their operands
@@ -79,10 +80,16 @@ def formula_to_string(formula):
         return "(" + " || ".join([formula_to_string(op) for op in formula.operands]) + ")"
     elif isinstance(formula, Not):
         return f"(!{formula_to_string(formula.argument)})"
+    elif isinstance(formula, Equivalence):
+        return f"({formula_to_string(formula.operands[0])} <-> {formula_to_string(formula.operands[1])})"
+    elif isinstance(formula, PropositionalTrue):
+        return "true"
+    elif isinstance(formula, PropositionalFalse):
+        return "false"
     else:
+        print(f"Don't know how to convert {type(formula)} to string")
         if hasattr(formula, 'argument'):
             # If the formula has operands, recursively convert them
-            print(f"Don't know how to convert {type(formula)} to string")
             return f"(??? {formula_to_string(formula.argument)})"
         return "(" + " ??? ".join([formula_to_string(op) for op in formula.operands]) + ")"
 
@@ -104,19 +111,28 @@ def fill_pattern(pattern: str, variables: dict):
     return pattern
 
 
-def find_pattern(formula: str):
+def find_pattern(formula: str, stringifier=formula_to_string):
     """
     Find a matching pattern for the given formula.
 
     :param formula: The LTL formula to match.
+    :param stringifier: A function to convert the formula to a string representation.
     :return: The pattern function with its name and matched variables, or the original formula if no match is found.
+
     """
+    found_pattern = False
     output = formula
     for name, (pattern, func_name) in patterns.items():
-        matched_vars = match_pattern(formula, pattern)
+        matched_vars = match_pattern(formula, pattern, stringifier)
         if matched_vars:
+            found_pattern = True
             output = fill_pattern(func_name, matched_vars)
             break
+
+    if not found_pattern:
+        # If no pattern matched, still use the stringifier to convert the formula
+        # since the stringifier might perform additional transformations
+        output = stringifier(parse_ltl(formula))
     return output
 
 

@@ -4,28 +4,66 @@
 import json
 import os
 import sys
-import re
 from patterns import find_pattern
 from remove_weak_until import remove_weak_until
+from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext, PropositionalTrue, \
+    PropositionalFalse
+from pylogics.syntax.base import Implies, And, Or, Not, Equivalence
+
+
+def formula_to_spectra_string(formula):
+    """
+    Convert a formula to a string representation suitable for Spectra.
+
+    :param formula: The LTL formula to convert.
+    :return: String representation of the formula.
+    """
+
+    if isinstance(formula, Atomic):
+        return f"({formula.name})"
+    elif isinstance(formula, Always):
+        if isinstance(formula.argument, Eventually):
+            # Special case for G(F(x)) to GF(x)
+            return f"GF({formula_to_spectra_string(formula.argument.argument)})"
+        return f"(G {formula_to_spectra_string(formula.argument)})"
+    elif isinstance(formula, Eventually):
+        return f"(F {formula_to_spectra_string(formula.argument)})"
+    elif isinstance(formula, Until):
+        return f"({formula_to_spectra_string(formula.operands[0])} U {formula_to_spectra_string(formula.operands[1])})"
+    elif isinstance(formula, Release):
+        return f"({formula_to_spectra_string(formula.operands[0])} R {formula_to_spectra_string(formula.operands[1])})"
+    elif isinstance(formula, Next) or isinstance(formula, WeakNext):
+        return f"(next{formula_to_spectra_string(formula.argument)})"
+    elif isinstance(formula, Implies):
+        return f"({formula_to_spectra_string(formula.operands[0])} -> {formula_to_spectra_string(formula.operands[1])})"
+    elif isinstance(formula, And):
+        return "(" + " & ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
+    elif isinstance(formula, Or):
+        return "(" + " | ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
+    elif isinstance(formula, Not):
+        return f"(!{formula_to_spectra_string(formula.argument)})"
+    elif isinstance(formula, Equivalence):
+        return f"({formula_to_spectra_string(formula.operands[0])} <-> {formula_to_spectra_string(formula.operands[1])})"
+    elif isinstance(formula, PropositionalTrue):
+        return "(true)"
+    elif isinstance(formula, PropositionalFalse):
+        return "(false)"
+    else:
+        print(f"Don't know how to convert {type(formula)} to string")
+        if hasattr(formula, 'argument'):
+            # If the formula has operands, recursively convert them
+            return f"(??? {formula_to_spectra_string(formula.argument)})"
+        return "(" + " ??? ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
 
 
 def transform_expression(expr):
     """Transform an LTL expression using both pattern matching and basic transformations."""
+
     # Remove weak until operators
     expr = remove_weak_until(expr)
 
     # Apply pattern matching transformation (returns the original formula if no pattern matches)
-    expr = find_pattern(expr)
-
-    # Always apply basic transformations as well
-    expr = expr.replace("&&", "&")
-    expr = expr.replace("||", "|")
-    expr = re.sub(r'\bX\b', 'next', expr)
-
-    match = re.fullmatch(r'G\(F\((.*)\)\)', expr)
-    if match:
-        inner = match.group(1)
-        expr = f"GF({inner})"
+    expr = find_pattern(expr, formula_to_spectra_string)
 
     return expr
 
@@ -43,8 +81,7 @@ def json_to_spectra(input_path):
     goals = data.get("goals", [])
 
     # Build spectra output
-    lines = [f"module {name}\n"]
-
+    lines = [f"module {name.replace(' ', '_')}\n"]
     for var in ins:
         lines.append(f"env boolean {var};")
     if ins:

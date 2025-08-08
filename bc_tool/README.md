@@ -17,7 +17,7 @@ python bc_tool/cli.py spec.json interpolation all-subsets --max-goals 3 --interp
 At the core of the system is the `BoundaryConditionChecker` class, which orchestrates the process of finding BCs. It is provided with a specification file (JSON format), a strategy for generating candidate BCs, and a strategy for selecting goal sets.
 
 Current BC generation strategies:
-- `PatternBCCandidateGenerator`: Generates candidates based on patterns. Currently tests every conjunction input atoms in the form `F (conjunction of input atoms)`.
+- `PatternBCCandidateGenerator`: Generates candidates based on patterns. By default tests every conjunction input atoms in the form `F (conjunction of input atoms)`.
 - `InterpolationBCCandidateGenerator`: Generates candidates from refinements obtained from interpolation. It needs a CSV file with refinement nodes.
 - `CustomBCCandidateGenerator`: User-defined candidates
 

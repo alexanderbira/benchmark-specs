@@ -23,6 +23,7 @@ from goal_set_generators import (
     SingleGoalSetGenerator,
     FullGoalSetGenerator
 )
+from display_utils import display_results
 
 
 def get_git_commit_hash() -> str:
@@ -72,6 +73,8 @@ def print_execution_info(args, checker: BoundaryConditionChecker):
     print(f"  Candidate Generator: {checker.candidate_generator.__class__.__name__}")
     if hasattr(checker.candidate_generator, 'max_atoms'):
         print(f"    Max Atoms: {checker.candidate_generator.max_atoms}")
+    if hasattr(checker.candidate_generator, 'pattern'):
+        print(f"    Pattern: {checker.candidate_generator.pattern}")
     if hasattr(checker.candidate_generator, 'csv_file_path'):
         print(f"    CSV File: {checker.candidate_generator.csv_file_path}")
     if hasattr(checker.candidate_generator, 'formulas'):
@@ -114,6 +117,8 @@ def parse_args():
                                  help='Custom LTL formulas (required for custom method)')
     candidate_group.add_argument('--max-atoms', type=int, default=-1, metavar='N',
                                  help='Maximum atoms in pattern conjunctions for patterns method (default: -1, no limit)')
+    candidate_group.add_argument('--pattern', type=str, default='F(conjunction)', metavar='PATTERN',
+                                 help='Pattern template for patterns method (default: "F(conjunction)"). Use "conjunction" as placeholder for variable combinations.')
 
     # Goal Set Generation Options
     goal_group = parser.add_argument_group('Goal Set Generation Options')
@@ -150,7 +155,7 @@ def create_candidate_generator(args):
     if args.bc_generator == 'interpolation':
         return InterpolationBCCandidateGenerator(args.interpolation_csv)
     elif args.bc_generator == 'patterns':
-        return PatternBCCandidateGenerator(max_atoms=args.max_atoms)
+        return PatternBCCandidateGenerator(max_atoms=args.max_atoms, pattern=args.pattern)
     else:
         return CustomBCCandidateGenerator(args.custom_formulas)
 
@@ -234,20 +239,8 @@ def main():
         # Find boundary conditions
         results = checker.find_bcs(verbose=not args.quiet, stop_on_first=args.stop_on_first)
 
-        # Print results summary
-        bcs = [r for r in results if r.is_boundary_condition]
-        ubcs = [r for r in results if r.is_unavoidable]
-
-        print(f"Results Summary:")
-        print(f"Boundary Conditions found: {len(bcs)}")
-        print(f"Unavoidable Boundary Conditions found: {len(ubcs)}")
-
-        if bcs and not args.quiet:
-            print(f"\nFound Boundary Conditions:")
-            for i, result in enumerate(bcs, 1):
-                bc_type = "UBC" if result.is_unavoidable else "BC"
-                print(f"{i:2d}. [{bc_type}] {result.candidate}")
-                print(f"     Goals ({len(result.goal_subset)}): {result.goal_subset}")
+        # Use shared display function
+        display_results(results, quiet=args.quiet)
 
     except Exception as e:
         print(f"Error: {e}")

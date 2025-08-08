@@ -30,9 +30,15 @@ def match_pattern(formula: str, pattern_formula: str, stringifier):
 
     def match_recursive(formula, pattern):
         if isinstance(pattern, Atomic):
-            # If the pattern is atomic, we assume it matches the formula
-            variables[pattern.name] = stringifier(formula)
-            return True
+            # If the pattern is atomic, check if we've seen this variable before
+            formula_str = stringifier(formula)
+            if pattern.name in variables:
+                # If we've seen this variable, it must match the same formula
+                return variables[pattern.name] == formula_str
+            else:
+                # First time seeing this variable, store it
+                variables[pattern.name] = formula_str
+                return True
         elif isinstance(formula, type(pattern)):
             # If both are of the same type, check their operands
             if hasattr(pattern, 'operands'):

@@ -5,11 +5,14 @@ from run_strix import run_strix_from_spec
 from spec_utils import traverse_spec_files_with_content
 
 
-def check_realizability_for_spec(spec_content: Dict) -> None:
-    """Check realizability for a single specification.
-    
+def is_realizable(spec_content: Dict) -> bool:
+    """Check if a specification is realizable.
+
     Args:
         spec_content: The specification dictionary
+
+    Returns:
+        True if the specification is realizable, False otherwise
     """
     try:
         name, output = run_strix_from_spec(
@@ -18,10 +21,21 @@ def check_realizability_for_spec(spec_content: Dict) -> None:
             extra_args=["-r"],
             capture_output=True
         )
-        print(f"{name}: {output}")
-    except Exception as e:
-        spec_name = spec_content.get("name", "unknown")
-        print(f"Error checking {spec_name}: {e}")
+        return output.strip() == "REALIZABLE"
+    except Exception:
+        return False
+
+
+def check_realizability_for_spec(spec_content: Dict) -> None:
+    """Check realizability for a single specification.
+    
+    Args:
+        spec_content: The specification dictionary
+    """
+    realizable = is_realizable(spec_content)
+    spec_name = spec_content.get("name", "unknown")
+    status = "REALIZABLE" if realizable else "NOT REALIZABLE"
+    print(f"{spec_name}: {status}")
 
 
 def main():
@@ -34,7 +48,7 @@ def main():
     if not directory.exists():
         print(f"Error: Directory '{directory}' does not exist")
         sys.exit(1)
-    
+
     traverse_spec_files_with_content(directory, check_realizability_for_spec)
 
 

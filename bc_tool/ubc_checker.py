@@ -1,5 +1,9 @@
 import spot
-from run_strix import run_strix_from_spec
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
+from check_realizability import is_realizable
 
 
 def check_sat(formula: str) -> bool:
@@ -46,14 +50,7 @@ def is_ubc(domains, goals, user_formula, input_vars, output_vars):
         "goals": [f"!({user_formula})"]
     }
 
-    unavoidable = False
-    try:
-        result = run_strix_from_spec(spec, "implication", ["-r"], capture_output=True)
-        if result:
-            _, output = result
-            unavoidable = "UNREALIZABLE" in output.upper()
-    except Exception:
-        pass
+    unavoidable = not is_realizable(spec)
 
     # 5. Determine boundary condition status
     is_boundary_condition = inconsistent and minimal and non_trivial

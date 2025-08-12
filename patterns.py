@@ -1,6 +1,7 @@
 # Utility for matching LTL formulas against predefined patterns
 
 import re
+import spot
 from pylogics.parsers import parse_ltl
 from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext, PropositionalTrue, \
     PropositionalFalse, WeakUntil
@@ -66,7 +67,14 @@ def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_str
     :param stringifier: A function to convert the formula to a string representation.
     :return: A dictionary of matched variables or None if no match is found.
     """
+
+    # Enabling will allow more obscure patterns to be matched, at the cost of multiple-variable matches to not be found
+    nenof = True  # Enable negative normal form conversion
+
     # Parse the formula and the pattern formula
+    if nenof:
+        formula = f"{spot.formula(formula).negative_normal_form():p}"
+        pattern_formula = f"{spot.formula(pattern_formula).negative_normal_form():p}"
     parsed_formula = parse_ltl(formula)
     parsed_pattern = parse_ltl(pattern_formula)
 

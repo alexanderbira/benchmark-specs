@@ -16,59 +16,6 @@ patterns = [
 ]
 
 
-def find_bcs_from_pattern(spec_file_path, candidate_pattern, goal_index_sets=None, verbose=True):
-    """Generate and test BC candidates based on a pattern template.
-
-    Args:
-        spec_file_path: Path to the specification file
-        candidate_pattern: Pattern template like "F(conjunction)" or "G(conjunction -> X conjunction)"
-        goal_index_sets: List of goal index sets to use, or None to use pairs of goals
-        verbose: Whether to print detailed output
-
-    Returns:
-        List of BC results
-    """
-    from bc_tool.bc_generators.pattern_bc_candidate_generator import PatternBCCandidateGenerator
-    from bc_tool.bc_checker import BoundaryConditionChecker
-
-    # Set up BC candidate generator with the given pattern
-    candidate_generator = PatternBCCandidateGenerator(
-        pattern=candidate_pattern,
-        max_atoms=5
-    )
-
-    # Set up goal set generator based on provided index sets
-    if goal_index_sets:
-        from bc_tool.goal_set_generators.index_based_goal_set_generator import IndexBasedGoalSetGenerator
-        goal_set_generator = IndexBasedGoalSetGenerator(index_sets=goal_index_sets)
-    else:
-        # Use subset generator to test pairs of goals
-        from bc_tool.goal_set_generators.subset_goal_set_generator import SubsetGoalSetGenerator
-        goal_set_generator = SubsetGoalSetGenerator(max_subset_size=2, min_subset_size=2)
-
-    # Create BC checker
-    bc_checker = BoundaryConditionChecker(
-        spec_file_path=spec_file_path,
-        candidate_generator=candidate_generator,
-        goal_set_generator=goal_set_generator
-    )
-
-    # Find boundary conditions
-    if verbose:
-        print(f"Searching for BCs using pattern: {candidate_pattern}")
-        if goal_index_sets:
-            print(f"Using goal index sets: {goal_index_sets}")
-        else:
-            print(f"Testing all pairs of goals")
-    results = bc_checker.find_bcs(verbose=verbose, stop_on_first=False)
-
-    # Use the reusable display function
-    if verbose:
-        display_results(results, quiet=False)
-
-    return results
-
-
 def pipeline_entry(spec, spec_file_path, verbose=True):
     """Run the pipeline on a spec file and return results."""
 
@@ -76,23 +23,70 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     if is_realizable(spec):
         print("Specification is realizable, skipping BC search.")
         return None
+    print("Specification is not realizable, proceeding with BC search.\n")
 
     # Branch 1 - check if it matches pattern
     for (pattern, bc_candidate) in patterns:
-        for goal in spec.get("goals", []):
-            # Match the goal against the pattern
-            match = match_pattern(goal, pattern)
-            if match:
-                if verbose:
-                    print(f"- Matched pattern \"{pattern}\"")
-                    return None
-                # TODO: Implement goal strategy of unrealizable core subsets
-                # results = find_bcs_from_pattern(spec_file_path, bc_candidate, goal_index_sets, verbose)
+        # Filter goals to only those matching the pattern
+        matching_goals = []
+        for goal in spec.get('goals', []):
+            if match_pattern(goal, pattern):
+                matching_goals.append(goal)
 
-    # No patterns matched
+        if not matching_goals:
+            if verbose:
+                print(f"No goals match pattern '{pattern}'")
+            continue
+
+        if verbose:
+            print(f"Found {len(matching_goals)} goals matching pattern '{pattern}'")
+            print(f"Using BC candidate pattern: '{bc_candidate}'")
+
+        # Use unrealizable core subsets generator with matching goals
+        from bc_tool.goal_set_generators.unrealizable_core_goal_set_generator import UnrealizableCoreGoalSetGenerator
+        from bc_tool.bc_generators.pattern_bc_candidate_generator import PatternBCCandidateGenerator
+        from bc_tool.bc_checker import BoundaryConditionChecker
+
+        # Create goal set generator with the full spec
+        goal_set_generator = UnrealizableCoreGoalSetGenerator(spec_content=spec)
+
+        # Tell it to only use the matching goals
+        goal_set_generator.set_goals_to_use(matching_goals)
+
+        # Create BC candidate generator with the pattern
+        candidate_generator = PatternBCCandidateGenerator(
+            pattern=bc_candidate,
+            max_atoms=5
+        )
+
+        # Create BC checker with the original spec file
+        bc_checker = BoundaryConditionChecker(
+            spec_file_path=spec_file_path,
+            candidate_generator=candidate_generator,
+            goal_set_generator=goal_set_generator
+        )
+
+        # Find boundary conditions using only the matching goals
+        if verbose:
+            print(f"Searching for BCs using unrealizable cores of goals matching pattern '{pattern}'")
+
+        results = bc_checker.find_bcs(verbose=verbose, stop_on_first=False)
+
+        if verbose:
+            display_results(results, quiet=False)
+        return results
+
+    # Branch 2 - if no patterns matched, try interpolation
     if verbose:
-        print("- No patterns matched")
-    return None
+        print("No patterns matched, trying interpolation-based BC search...\n")
+
+    # Create spectra file to give to interpolator
+    from to_spectra import json_to_spectra
+    json_to_spectra(spec_file_path)
+
+    print("Please use the interpolation repair tool to generate the nodes CSV file from the generated Spectra file.\n")
+    csv_path = input("Enter the name of the generated nodes CSV file (`interpolation-outputs/{filename}`): \n").strip()
+    # TODO: next part of pipeline
 
 
 # CLI entry point for the pipeline which takes a path to a specification file
@@ -104,7 +98,7 @@ if __name__ == "__main__":
 
     # Load the specification file
     spec = load_spec_file(args.spec_file)
-    print(f"Loaded specification: {spec.get('name', 'Unknown')}")
+    print(f"Loaded specification: {spec.get('name', 'Unknown')}\n")
 
     # Call the pipeline entry point
     pipeline_entry(spec, args.spec_file)

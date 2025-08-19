@@ -1,6 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
+import subprocess
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
@@ -82,11 +83,33 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     # Create spectra file to give to interpolator
     from to_spectra import json_to_spectra
-    json_to_spectra(spec_file_path)
+    filename = json_to_spectra(spec_file_path)
 
-    print("Please use the interpolation repair tool to generate the nodes CSV file from the generated Spectra file.\n")
-    csv_path = input("Enter the name of the generated nodes CSV file (`interpolation-outputs/{filename}`): \n").strip()
-    # TODO: next part of pipeline
+    # Flatten the enums and Dwyer patterns in the spec with the iterpolator translator
+    Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
+
+    if verbose:
+        print(f"Flattening the spec '{filename}' using the interpolator translator...")
+    cmd = " ".join([
+        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
+        "sh", "-c",
+        f"'cd translator && python spec_translator.py /data/translated/{filename} && mv outputs/{filename} /data/interpolator_translated/{filename}'"
+    ])
+
+    result = subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        shell=True,
+        executable="/bin/zsh"
+    )
+
+    if result.returncode != 0:
+        print(f"Error running command: {result.stderr.strip()}")
+        return None
+
+    if verbose:
+        print(f"Flattened spec saved to 'interpolator_translated/{filename}'\n")
 
 
 # CLI entry point for the pipeline which takes a path to a specification file

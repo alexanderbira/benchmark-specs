@@ -123,6 +123,7 @@ def json_to_spectra(input_path):
         f.write(output)
 
     print(f"Converted '{input_path}' to '{output_filename}'")
+    return f"{base_name}.spectra"
 
 
 if __name__ == "__main__":

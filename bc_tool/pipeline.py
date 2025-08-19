@@ -110,6 +110,30 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     if verbose:
         print(f"Flattened spec saved to 'interpolator_translated/{filename}'\n")
+        print("Running the interpolator...")
+
+    # Now run the interpolator
+    cmd = " ".join([
+        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
+        "sh", "-c",
+        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
+    ])
+
+    result = subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        shell=True,
+        executable="/bin/zsh"
+    )
+
+    if result.returncode != 0:
+        print(f"Error running interpolator: {result.stderr.strip()}")
+        return None
+
+    if verbose:
+        print(
+            f"Interpolation results saved to 'interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'\n")
 
 
 # CLI entry point for the pipeline which takes a path to a specification file

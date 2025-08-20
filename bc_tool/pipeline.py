@@ -2,6 +2,8 @@ import argparse
 import sys
 from pathlib import Path
 import subprocess
+import re
+import pandas as pd
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
@@ -116,7 +118,7 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     cmd = " ".join([
         "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
         "sh", "-c",
-        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
+        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 3 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
     ])
 
     result = subprocess.run(
@@ -134,6 +136,35 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     if verbose:
         print(
             f"Interpolation results saved to 'interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'\n")
+
+    # Find BCs from the interpolation results
+
+    with open(f"interpolator_translated/{filename}", 'r') as f:
+        spec_data = f.read()
+
+    # Remove guarantees from the spec data
+    spec_data = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
+
+    # Get the realizable refinements from the interpolator output
+    interpolation_df = pd.read_csv(f"interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv")
+    realizable_entries = []
+    realizable_rows = interpolation_df[interpolation_df['is_realizable'] == True]
+    for _, row in realizable_rows.iterrows():
+        parent_row = interpolation_df[interpolation_df['node_id'] == row['parent_node_id']]
+        if not parent_row.empty:
+            parent_unreal_core = parent_row.iloc[0]['unreal_core']
+            realizable_entries.append({
+                'refinement': row['refinement'],
+                'parent_unreal_core': parent_unreal_core
+            })
+
+    for entry in realizable_entries:
+        refinement = entry['refinement']
+        parent_unreal_core = entry['parent_unreal_core']
+
+        for conjunct in refinement:
+            bc_candidate = "!" + conjunct
+            # TODO
 
 
 # CLI entry point for the pipeline which takes a path to a specification file

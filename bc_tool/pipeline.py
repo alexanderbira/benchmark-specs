@@ -4,9 +4,11 @@ from pathlib import Path
 import subprocess
 import re
 import pandas as pd
+import os
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
+from ubc_checker import is_ubc
 from check_realizability import is_realizable
 from spec_utils import load_spec_file
 from patterns import match_pattern
@@ -118,7 +120,7 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     cmd = " ".join([
         "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
         "sh", "-c",
-        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 3 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
+        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
     ])
 
     result = subprocess.run(
@@ -144,6 +146,14 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     # Remove guarantees from the spec data
     spec_data = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
+    # If any line starts with a "G" with no spaces before it, put "assumption " before it (I think this is a bug in the translator)
+    spec_data = re.sub(r'(?m)^(G)', r'assumption \1', spec_data)
+    # Extract assumptions from the spec data (between "assumption" and ";")
+    assumptions = re.findall(r'assumption\s+(.*?);', spec_data, flags=re.DOTALL)
+    # replace "next" with X    # replace "next" with X
+    assumptions = [re.sub(r'next', 'X', expr.strip()) for expr in assumptions]
+    # replace "GF" with "G F"
+    assumptions = [re.sub(r'GF', 'G F', expr) for expr in assumptions]
 
     # Get the realizable refinements from the interpolator output
     interpolation_df = pd.read_csv(f"interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv")
@@ -157,17 +167,81 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
                 'refinement': row['refinement'],
                 'parent_unreal_core': parent_unreal_core
             })
+        parent_unreal_core = [re.sub(r'GF', 'G F', expr) for expr in parent_unreal_core]
 
     for entry in realizable_entries:
-        refinement = entry['refinement']
-        parent_unreal_core = entry['parent_unreal_core']
+        refinement = eval(entry['refinement'])
 
+        parent_unreal_core = eval(entry['parent_unreal_core'])
+        # replace "next" with X
+        parent_unreal_core = [re.sub(r'next', 'X', expr.strip()) for expr in parent_unreal_core]
+        # replace "GF" with "G F"
         for conjunct in refinement:
-            bc_candidate = "!" + conjunct
-            # TODO
+            # replace "next" with X
+            candidate = re.sub(r'next', 'X', conjunct)
+            # replace "alwEv" with G F
+            candidate = re.sub(r'alwEv', 'G F', candidate)
+            # replace "alw" with G
+            candidate = re.sub(r'alw', 'G', candidate)
+            candidate = "!(" + candidate + ")"
+
+            # Check if the candidate is a boundary condition
+            is_bc = is_ubc(assumptions, parent_unreal_core, candidate, [], [])[4]
+            if not is_bc:
+                continue
+
+            print(f"\nFound boundary condition: {candidate}")
+
+            # replace "alwEv" with G F
+            not_phi = re.sub(r'alwEv', 'GF', conjunct)
+            # replace "alw" with G
+            not_phi = re.sub(r'alw', 'G', not_phi)
+
+            spec_to_check = spec_data + "\nguarantee " + not_phi + ";"
+
+            # Write spec_to_check to a temporary file
+            temp_spec_filename = f"temp_spec_{hash(spec_to_check) % 10000}.spectra"
+            temp_spec_path = f"temp/{temp_spec_filename}"
+
+            # Ensure temp directory exists
+            Path("temp").mkdir(parents=True, exist_ok=True)
+
+            # Write the spec to the file
+            with open(temp_spec_path, 'w') as f:
+                f.write(spec_to_check)
+
+            print(f"Checking realizability of spec with guarantee: {not_phi}")
+
+            # Run realizability check using Docker container
+            cmd = " ".join([
+                "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
+                "python", "-c",
+                f"\"from spectra_utils import check_realizability; result = check_realizability('/data/{temp_spec_path}', 60); print('REALIZABLE' if result else 'UNREALIZABLE')\""
+            ])
+
+            result = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                shell=True,
+                executable="/bin/zsh"
+            )
+
+            if result.returncode != 0:
+                print(f"Error checking realizability: {result.stderr.strip()}")
+
+            # Clean up temporary file
+            try:
+                os.unlink(temp_spec_path)
+            except OSError:
+                pass
+
+            if "UNREALIZABLE" in result.stdout:
+                print(f"It is a UBC")
+            else:
+                print(f"It is not a UBC")
 
 
-# CLI entry point for the pipeline which takes a path to a specification file
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the BC tool pipeline on a specification file")
     parser.add_argument("spec_file", type=str, help="Path to the JSON specification file")

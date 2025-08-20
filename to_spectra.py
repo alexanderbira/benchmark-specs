@@ -81,7 +81,7 @@ def json_to_spectra(input_path):
     goals = data.get("goals", [])
 
     # Build spectra output
-    lines = [f"module {name.replace(' ', '_')}\n"]
+    lines = [f"module {''.join(c if c.isalnum() else '_' if c == ' ' else '' for c in name)}\n"]
     for var in ins:
         lines.append(f"env boolean {var};")
     if ins:

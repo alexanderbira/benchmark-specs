@@ -13,6 +13,7 @@ from check_realizability import is_realizable
 from spec_utils import load_spec_file
 from patterns import match_pattern
 from bc_tool.display_utils import display_results
+from to_spectra import json_to_spectra
 
 # Tuple of (goal shape, BC candidate shape)
 # "conjunction" in the BC candidate formula will be replaced with conjunctions
@@ -20,22 +21,25 @@ patterns = [
     ("G (p -> X q)", "F (conjunction)"),
 ]
 
+MAX_ATOMS = 5  # Maximum number of atoms in a pattern BC candidate conjunction
+INTERPOLATOR_TIMEOUT = 1200  # Timeout for the interpolator in seconds
+INTERPOLATOR_REPAIR_LIMIT = 2  # Maximum number of realizable refinements to generate
+REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
-def run_in_spectra_container(command, verbose=True):
+
+def run_in_spectra_container(*commands):
     """Run a command inside the spectra Docker container.
 
     Args:
         command: The command to run inside the container
-        verbose: Whether to print verbose output on errors
 
     Returns:
         subprocess.CompletedProcess: The result of the subprocess run
     """
     cmd = " ".join([
-        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-        "sh", "-c",
-        f"'{command}'"
-    ])
+                       "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
+                       "sh", "-c"
+                   ] + list(commands))
 
     return subprocess.run(
         cmd,
@@ -87,7 +91,7 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         # Create BC candidate generator with the pattern
         candidate_generator = PatternBCCandidateGenerator(
             pattern=bc_candidate,
-            max_atoms=5
+            max_atoms=MAX_ATOMS
         )
 
         # Create BC checker with the original spec file
@@ -112,7 +116,6 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         print("No patterns matched, trying interpolation-based BC search...\n")
 
     # Create spectra file to give to interpolator
-    from to_spectra import json_to_spectra
     filename = json_to_spectra(spec_file_path)
 
     # Flatten the enums and Dwyer patterns in the spec with the interpolator translator
@@ -122,7 +125,9 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         print(f"Flattening the spec '{filename}' using the interpolator translator...")
 
     result = run_in_spectra_container(
-        f"cd translator && python spec_translator.py /data/translated/{filename} && mv outputs/{filename} /data/interpolator_translated/{filename}"
+        f"'cd translator && "
+        f"python spec_translator.py /data/translated/{filename} && "
+        f"mv outputs/{filename} /data/interpolator_translated/{filename}'"
     )
 
     if result.returncode != 0:
@@ -135,7 +140,14 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     # Now run the interpolator
     result = run_in_spectra_container(
-        f"python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv"
+        f"'python interpolation_repair.py "
+        f"-i /data/interpolator_translated/{filename} "
+        f"-o outputs "
+        f"-t {INTERPOLATOR_TIMEOUT} "
+        f"-rl {INTERPOLATOR_REPAIR_LIMIT} && "
+        f"mv "
+        f"outputs/{filename.split('.')[0]}_interpolation_nodes.csv "
+        f"/data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
     )
 
     if result.returncode != 0:
@@ -144,7 +156,9 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     if verbose:
         print(
-            f"Interpolation results saved to 'interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'\n")
+            f"Interpolation results saved to "
+            f"'interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'\n"
+        )
 
     # Find BCs from the interpolation results
 
@@ -185,19 +199,19 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         # replace "GF" with "G F"
         for conjunct in refinement:
             # replace "next" with X
-            candidate = re.sub(r'next', 'X', conjunct)
+            phi = re.sub(r'next', 'X', conjunct)
             # replace "alwEv" with G F
-            candidate = re.sub(r'alwEv', 'G F', candidate)
+            phi = re.sub(r'alwEv', 'G F', phi)
             # replace "alw" with G
-            candidate = re.sub(r'alw', 'G', candidate)
-            candidate = "!(" + candidate + ")"
+            phi = re.sub(r'alw', 'G', phi)
+            phi = "!(" + phi + ")"
 
             # Check if the candidate is a boundary condition
-            is_bc = is_ubc(assumptions, parent_unreal_core, candidate, [], [])[4]
+            is_bc = is_ubc(assumptions, parent_unreal_core, phi, [], [])[4]
             if not is_bc:
                 continue
 
-            print(f"\nFound boundary condition: {candidate}")
+            print(f"\nFound boundary condition: {phi}")
 
             # replace "alwEv" with G F
             not_phi = re.sub(r'alwEv', 'GF', conjunct)
@@ -217,29 +231,26 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
             with open(temp_spec_path, 'w') as f:
                 f.write(spec_to_check)
 
-            print(f"Checking realizability of spec with guarantee: {not_phi}")
-
-            # Run realizability check using Docker container
+            # Run realizability check using Spectra container
             result = run_in_spectra_container(
-                f"python -c \"from spectra_utils import check_realizability; result = check_realizability('/data/{temp_spec_path}', 60); print('REALIZABLE' if result else 'UNREALIZABLE')\""
+                f"python", "-c",
+                f"\"from spectra_utils import check_realizability;"
+                f"result = check_realizability('/data/{temp_spec_path}', 60);"
+                f"print('REALIZABLE' if result else 'UNREALIZABLE')\""
             )
 
             if result.returncode != 0:
                 print(f"Error checking realizability: {result.stderr.strip()}")
 
             # Clean up temporary file
-            try:
-                os.unlink(temp_spec_path)
-            except OSError:
-                pass
+            os.unlink(temp_spec_path)
 
             if "UNREALIZABLE" in result.stdout:
                 print(f"It is a UBC")
             else:
                 print(f"It is not a UBC")
 
-    print("All boundary conditions checked.")
-    print("Pipeline completed successfully.")
+    print("\nAll boundary conditions checked.")
 
 
 if __name__ == "__main__":

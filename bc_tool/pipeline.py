@@ -21,6 +21,31 @@ patterns = [
 ]
 
 
+def run_in_spectra_container(command, verbose=True):
+    """Run a command inside the spectra Docker container.
+
+    Args:
+        command: The command to run inside the container
+        verbose: Whether to print verbose output on errors
+
+    Returns:
+        subprocess.CompletedProcess: The result of the subprocess run
+    """
+    cmd = " ".join([
+        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
+        "sh", "-c",
+        f"'{command}'"
+    ])
+
+    return subprocess.run(
+        cmd,
+        text=True,
+        capture_output=True,
+        shell=True,
+        executable="/bin/zsh"
+    )
+
+
 def pipeline_entry(spec, spec_file_path, verbose=True):
     """Run the pipeline on a spec file and return results."""
 
@@ -28,6 +53,7 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     if is_realizable(spec):
         print("Specification is realizable, skipping BC search.")
         return None
+
     print("Specification is not realizable, proceeding with BC search.\n")
 
     # Branch 1 - check if it matches pattern
@@ -89,27 +115,18 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     from to_spectra import json_to_spectra
     filename = json_to_spectra(spec_file_path)
 
-    # Flatten the enums and Dwyer patterns in the spec with the iterpolator translator
+    # Flatten the enums and Dwyer patterns in the spec with the interpolator translator
     Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
 
     if verbose:
         print(f"Flattening the spec '{filename}' using the interpolator translator...")
-    cmd = " ".join([
-        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-        "sh", "-c",
-        f"'cd translator && python spec_translator.py /data/translated/{filename} && mv outputs/{filename} /data/interpolator_translated/{filename}'"
-    ])
 
-    result = subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-        shell=True,
-        executable="/bin/zsh"
+    result = run_in_spectra_container(
+        f"cd translator && python spec_translator.py /data/translated/{filename} && mv outputs/{filename} /data/interpolator_translated/{filename}"
     )
 
     if result.returncode != 0:
-        print(f"Error running command: {result.stderr.strip()}")
+        print(f"The spec was malformed and the translator failed")
         return None
 
     if verbose:
@@ -117,18 +134,8 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         print("Running the interpolator...")
 
     # Now run the interpolator
-    cmd = " ".join([
-        "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-        "sh", "-c",
-        f"'python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
-    ])
-
-    result = subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-        shell=True,
-        executable="/bin/zsh"
+    result = run_in_spectra_container(
+        f"python interpolation_repair.py -i /data/interpolator_translated/{filename} -o outputs -t 1200 -rl 5 && mv outputs/{filename.split('.')[0]}_interpolation_nodes.csv /data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv"
     )
 
     if result.returncode != 0:
@@ -213,18 +220,8 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
             print(f"Checking realizability of spec with guarantee: {not_phi}")
 
             # Run realizability check using Docker container
-            cmd = " ".join([
-                "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-                "python", "-c",
-                f"\"from spectra_utils import check_realizability; result = check_realizability('/data/{temp_spec_path}', 60); print('REALIZABLE' if result else 'UNREALIZABLE')\""
-            ])
-
-            result = subprocess.run(
-                cmd,
-                text=True,
-                capture_output=True,
-                shell=True,
-                executable="/bin/zsh"
+            result = run_in_spectra_container(
+                f"python -c \"from spectra_utils import check_realizability; result = check_realizability('/data/{temp_spec_path}', 60); print('REALIZABLE' if result else 'UNREALIZABLE')\""
             )
 
             if result.returncode != 0:
@@ -240,6 +237,9 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
                 print(f"It is a UBC")
             else:
                 print(f"It is not a UBC")
+
+    print("All boundary conditions checked.")
+    print("Pipeline completed successfully.")
 
 
 if __name__ == "__main__":

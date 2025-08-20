@@ -58,18 +58,16 @@ def formula_to_string(formula):
 # Returns the matched formula or None if no match is found
 # E.g. match_pattern("G ((G x) -> F(y || x))", "G (P -> F Q)") -> {"P": "G x", "Q": "y || x"}
 # Note: only syntactic structure is matched, not semantic equivalence (since that is a much harder problem)
-def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string):
+def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string, nenof: bool = False):
     """
     Match a formula against a pattern formula.
 
     :param formula: The LTL formula to match.
     :param pattern_formula: The pattern formula to match against.
     :param stringifier: A function to convert the formula to a string representation.
+    :param nenof: If True, convert the formula and pattern to negative normal form before matching.
     :return: A dictionary of matched variables or None if no match is found.
     """
-
-    # Enabling will allow more obscure patterns to be matched, at the cost of multiple-variable matches to not be found
-    nenof = True  # Enable negative normal form conversion
 
     # Parse the formula and the pattern formula
     if nenof:
@@ -141,7 +139,14 @@ def find_pattern(formula: str, stringifier=formula_to_string):
     found_pattern = False
     output = formula
     for name, (pattern, func_name) in patterns.items():
-        matched_vars = match_pattern(formula, pattern)
+        # without NNF
+        matched_vars = match_pattern(formula, pattern, nenof=False)
+        if matched_vars:
+            found_pattern = True
+            output = fill_pattern(func_name, matched_vars)
+            break
+        # with NNF
+        matched_vars = match_pattern(formula, pattern, nenof=True)
         if matched_vars:
             found_pattern = True
             output = fill_pattern(func_name, matched_vars)

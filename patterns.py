@@ -110,18 +110,19 @@ def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_str
     return None
 
 
-def fill_pattern(pattern: str, variables: dict):
+def fill_pattern(pattern: str, variables: dict, stringifier):
     """
     Fill a pattern with the matched variables.
 
     :param pattern: The pattern function string to fill.
     :param variables: A dictionary of matched variables.
+    :param stringifier: A function to convert the formula to a string representation.
     :return: The filled pattern string.
     """
     match = re.search(r'\(([^)]*)\)', pattern)
     if match:
         arg_str = match.group(1)
-        filled_args = [variables[v.strip()] for v in arg_str.split(',')]
+        filled_args = [stringifier(parse_ltl(variables[v.strip()])) for v in arg_str.split(',')]
         filled_pattern = pattern.replace(arg_str, ', '.join(filled_args))
         return filled_pattern
     return pattern
@@ -143,13 +144,13 @@ def find_pattern(formula: str, stringifier=formula_to_string):
         matched_vars = match_pattern(formula, pattern, nenof=False)
         if matched_vars:
             found_pattern = True
-            output = fill_pattern(func_name, matched_vars)
+            output = fill_pattern(func_name, matched_vars, stringifier)
             break
         # with NNF
         matched_vars = match_pattern(formula, pattern, nenof=True)
         if matched_vars:
             found_pattern = True
-            output = fill_pattern(func_name, matched_vars)
+            output = fill_pattern(func_name, matched_vars, stringifier)
             break
 
     if not found_pattern:

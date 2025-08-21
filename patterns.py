@@ -20,37 +20,37 @@ def formula_to_string(formula):
     if isinstance(formula, Atomic):
         return formula.name
     elif isinstance(formula, Always):
-        return f"(G {formula_to_string(formula.argument)})"
+        return f"G ({formula_to_string(formula.argument)})"
     elif isinstance(formula, Eventually):
-        return f"(F {formula_to_string(formula.argument)})"
+        return f"F ({formula_to_string(formula.argument)})"
     elif isinstance(formula, Until):
-        return f"({formula_to_string(formula.operands[0])} U {formula_to_string(formula.operands[1])})"
+        return f"({formula_to_string(formula.operands[0])}) U ({formula_to_string(formula.operands[1])})"
     elif isinstance(formula, Release):
-        return f"({formula_to_string(formula.operands[0])} R {formula_to_string(formula.operands[1])})"
+        return f"({formula_to_string(formula.operands[0])}) R ({formula_to_string(formula.operands[1])})"
     elif isinstance(formula, Next) or isinstance(formula, WeakNext):
-        return f"(X {formula_to_string(formula.argument)})"
+        return f"X ({formula_to_string(formula.argument)})"
     elif isinstance(formula, Implies):
-        return f"({formula_to_string(formula.operands[0])} -> {formula_to_string(formula.operands[1])})"
+        return f"({formula_to_string(formula.operands[0])}) -> ({formula_to_string(formula.operands[1])})"
     elif isinstance(formula, And):
-        return "(" + " && ".join([formula_to_string(op) for op in formula.operands]) + ")"
+        return " && ".join([f"({formula_to_string(op)})" for op in formula.operands])
     elif isinstance(formula, Or):
-        return "(" + " || ".join([formula_to_string(op) for op in formula.operands]) + ")"
+        return " || ".join([f"({formula_to_string(op)})" for op in formula.operands])
     elif isinstance(formula, Not):
-        return f"(!{formula_to_string(formula.argument)})"
+        return f"!({formula_to_string(formula.argument)})"
     elif isinstance(formula, Equivalence):
-        return f"({formula_to_string(formula.operands[0])} <-> {formula_to_string(formula.operands[1])})"
+        return f"({formula_to_string(formula.operands[0])}) <-> ({formula_to_string(formula.operands[1])})"
     elif isinstance(formula, PropositionalTrue):
         return "true"
     elif isinstance(formula, PropositionalFalse):
         return "false"
     elif isinstance(formula, WeakUntil):
-        return f"({formula_to_string(formula.operands[0])} W {formula_to_string(formula.operands[1])})"
+        return f"({formula_to_string(formula.operands[0])}) W ({formula_to_string(formula.operands[1])})"
     else:
         print(f"Don't know how to convert {type(formula)} to string")
         if hasattr(formula, 'argument'):
             # If the formula has operands, recursively convert them
-            return f"(??? {formula_to_string(formula.argument)})"
-        return "(" + " ??? ".join([formula_to_string(op) for op in formula.operands]) + ")"
+            return f"??? ({formula_to_string(formula.argument)})"
+        return " ??? ".join([f"({formula_to_string(op)})" for op in formula.operands])
 
 
 # Recursively tries to match a formula against the defined patterns

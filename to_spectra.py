@@ -20,40 +20,40 @@ def formula_to_spectra_string(formula):
     """
 
     if isinstance(formula, Atomic):
-        return f"({formula.name})"
+        return formula.name
     elif isinstance(formula, Always):
         if isinstance(formula.argument, Eventually):
             # Special case for G(F(x)) to GF(x)
             return f"GF({formula_to_spectra_string(formula.argument.argument)})"
-        return f"(G {formula_to_spectra_string(formula.argument)})"
+        return f"G ({formula_to_spectra_string(formula.argument)})"
     elif isinstance(formula, Eventually):
-        return f"(F {formula_to_spectra_string(formula.argument)})"
+        return f"F ({formula_to_spectra_string(formula.argument)})"
     elif isinstance(formula, Until):
-        return f"({formula_to_spectra_string(formula.operands[0])} U {formula_to_spectra_string(formula.operands[1])})"
+        return f"({formula_to_spectra_string(formula.operands[0])}) U ({formula_to_spectra_string(formula.operands[1])})"
     elif isinstance(formula, Release):
-        return f"({formula_to_spectra_string(formula.operands[0])} R {formula_to_spectra_string(formula.operands[1])})"
+        return f"({formula_to_spectra_string(formula.operands[0])}) R ({formula_to_spectra_string(formula.operands[1])})"
     elif isinstance(formula, Next) or isinstance(formula, WeakNext):
-        return f"(next{formula_to_spectra_string(formula.argument)})"
+        return f"next({formula_to_spectra_string(formula.argument)})"
     elif isinstance(formula, Implies):
-        return f"({formula_to_spectra_string(formula.operands[0])} -> {formula_to_spectra_string(formula.operands[1])})"
+        return f"({formula_to_spectra_string(formula.operands[0])}) -> ({formula_to_spectra_string(formula.operands[1])})"
     elif isinstance(formula, And):
-        return "(" + " & ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
+        return " & ".join([f"({formula_to_spectra_string(op)})" for op in formula.operands])
     elif isinstance(formula, Or):
-        return "(" + " | ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
+        return " | ".join([f"({formula_to_spectra_string(op)})" for op in formula.operands])
     elif isinstance(formula, Not):
-        return f"(!{formula_to_spectra_string(formula.argument)})"
+        return f"!({formula_to_spectra_string(formula.argument)})"
     elif isinstance(formula, Equivalence):
-        return f"({formula_to_spectra_string(formula.operands[0])} <-> {formula_to_spectra_string(formula.operands[1])})"
+        return f"({formula_to_spectra_string(formula.operands[0])}) <-> ({formula_to_spectra_string(formula.operands[1])})"
     elif isinstance(formula, PropositionalTrue):
-        return "(true)"
+        return "true"
     elif isinstance(formula, PropositionalFalse):
-        return "(false)"
+        return "false"
     else:
         print(f"Don't know how to convert {type(formula)} to string")
         if hasattr(formula, 'argument'):
             # If the formula has operands, recursively convert them
-            return f"(??? {formula_to_spectra_string(formula.argument)})"
-        return "(" + " ??? ".join([formula_to_spectra_string(op) for op in formula.operands]) + ")"
+            return f"??? ({formula_to_spectra_string(formula.argument)})"
+        return " ??? ".join([f"({formula_to_spectra_string(op)})" for op in formula.operands])
 
 
 def transform_expression(expr):

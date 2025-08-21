@@ -3,8 +3,15 @@ import sys
 from pathlib import Path
 import subprocess
 import re
+from typing import List
+from collections import defaultdict
+
 import pandas as pd
 import os
+import spot
+
+from compute_unrealizable_cores import compute_unrealizable_cores
+from generate_pattern_candidates import generate_pattern_candidates
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
@@ -15,15 +22,16 @@ from patterns import match_pattern
 from bc_tool.display_utils import display_results
 from to_spectra import json_to_spectra
 
-# Tuple of (goal shape, BC candidate shape)
-# "conjunction" in the BC candidate formula will be replaced with conjunctions
+# "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
+# (BC candidate pattern, max atoms in conjunction)
 patterns = [
-    ("G (p -> X q)", "F (conjunction)"),
+    ("F(c1)", 5),  # Achieve-Avoid
+    ("F(c1 & ((!c2) U G(!c1)))", 3),  # Retraction
+    ("(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)", 1),
 ]
 
-MAX_ATOMS = 5  # Maximum number of atoms in a pattern BC candidate conjunction
-INTERPOLATOR_TIMEOUT = 1200  # Timeout for the interpolator in seconds
-INTERPOLATOR_REPAIR_LIMIT = 2  # Maximum number of realizable refinements to generate
+INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
+INTERPOLATOR_REPAIR_LIMIT = -1  # Maximum number of realizable refinements to generate
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
 
@@ -50,6 +58,122 @@ def run_in_spectra_container(*commands):
     )
 
 
+class Results:
+    """Class to hold results of the BC search."""
+
+    class BC:
+        """Class representing a Boundary Condition (BC)."""
+
+        def __init__(self, formula: str, goals: List[str], unavoidable: bool):
+            """Initialize a BC.
+
+            Args:
+                formula: The LTL formula representing the BC
+                goals: List of goals (by spec index) that the BC is checking against
+                unavoidable: Whether the BC is an unavoidable boundary condition
+            """
+            self.formula = formula
+            self.goals = goals
+            self.unavoidable = unavoidable
+
+    def __init__(self, spec: dict):
+        """Initialize an empty results container."""
+        self.spec = spec
+        self.bcs: List[Results.BC] = []  # List of Boundary Conditions
+
+    def add_bc(self, bc_formula: str, goals: List[str], unavoidable: bool):
+        """Add a Boundary Condition to the results."""
+        bc = self.BC(bc_formula, goals, unavoidable)
+        self.bcs.append(bc)
+
+    def _spot_implies(self, formula_a: str, formula_b: str) -> bool:
+        """Check if formula_a implies formula_b using Spot.
+
+        Args:
+            formula_a: The antecedent formula
+            formula_b: The consequent formula
+
+        Returns:
+            True if formula_a implies formula_b, False otherwise
+        """
+        try:
+            # Parse formulas using Spot
+            f_a = spot.formula(formula_a)
+            f_b = spot.formula(formula_b)
+
+            # Check if A implies B by checking if (A & !B) is unsatisfiable
+            # This is equivalent to checking if A -> B is a tautology
+            not_f_b = spot.formula.Not(f_b)
+            implication_check = spot.formula.And([f_a, not_f_b])
+
+            # Convert to automaton and check if it's empty (unsatisfiable)
+            aut = spot.translate(implication_check)
+            return aut.is_empty()
+
+        except Exception as e:
+            # If there's an error parsing or checking, assume no implication
+            # This is a conservative approach that keeps both formulas
+            print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
+            return False
+
+    def filter_bcs(self):
+        """Filter out BC candidates whose formulas are implied by other BCs with the same goals."""
+        # Group BCs by goal set, then remove implied formulas
+        goal_groups = defaultdict(list)
+        for bc in self.bcs:
+            goal_key = tuple(sorted(bc.goals))
+            goal_groups[goal_key].append(bc)
+
+        # For each group, remove BCs whose formula is implied by another BC's formula
+        final_bcs = []
+        for goal_key, group in goal_groups.items():
+            # First, remove equivalent BCs (same formula) from the group
+            unique_bcs = []
+            seen_formulas = set()
+            for bc in group:
+                if bc.formula not in seen_formulas:
+                    seen_formulas.add(bc.formula)
+                    unique_bcs.append(bc)
+
+            # Now check for implications among the unique BCs
+            non_implied = []
+
+            for bc in unique_bcs:
+                # Check if this BC's formula is implied by any other BC in the same group
+                is_implied = False
+                for other_bc in unique_bcs:
+                    if bc != other_bc and self._spot_implies(other_bc.formula, bc.formula):
+                        is_implied = True
+                        break
+
+                if not is_implied:
+                    non_implied.append(bc)
+
+            final_bcs.extend(non_implied)
+
+        self.bcs = final_bcs
+
+    def display(self):
+        """Display the results in a readable format."""
+        print(f"Results for specification: {self.spec.get('name', 'Unknown')}")
+        print(f"Total Boundary Conditions found: {len(self.bcs)}\n")
+        print(f"Unavoidable Boundary Conditions: {sum(1 for bc in self.bcs if bc.unavoidable)}\n")
+
+        # Group BCs by formula
+        formula_groups = defaultdict(list)
+        for bc in self.bcs:
+            formula_groups[bc.formula].append(bc)
+
+        print("Boundary Conditions grouped by formula:\n")
+        for i, (formula, bcs) in enumerate(formula_groups.items(), 1):
+            print(f"Formula {i}: {formula}")
+            print(f"  Goal sets:")
+            for bc in bcs:
+                unavoidable_str = " (UBC)" if bc.unavoidable else " (BC)"
+                print(f"    {bc.goals}{unavoidable_str}")
+            print()  # Empty line between formulas
+
+
 def pipeline_entry(spec, spec_file_path, verbose=True):
     """Run the pipeline on a spec file and return results."""
 
@@ -61,59 +185,33 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     print("Specification is not realizable, proceeding with BC search.\n")
 
     # Branch 1 - check if it matches pattern
-    for (pattern, bc_candidate) in patterns:
-        # Filter goals to only those matching the pattern
-        matching_goals = []
-        for goal in spec.get('goals', []):
-            if match_pattern(goal, pattern):
-                matching_goals.append(goal)
+    pattern_results = Results(spec)
+    unrealizable_cores = compute_unrealizable_cores(spec)
+    for (bc_pattern, max_atoms) in patterns:
+        print(f"Checking pattern: {bc_pattern}")
+        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
+        i = 1
+        for bc_candidate in bc_candidates:
+            print(f"\nChecking BC candidate {i}: {bc_candidate}")
+            i += 1
+            for core in unrealizable_cores:
+                # Check if the current candidate is a (U)BC for the current unrealizable core
+                result = is_ubc(
+                    spec.get('domains', []),
+                    core,
+                    bc_candidate,
+                    spec.get('ins', []),
+                    spec.get('outs', [])
+                )
+                if result[4]:  # If it is a boundary condition
+                    print(f"Found boundary condition: {bc_candidate} for core {core}, is UBC: {result[3]}")
+                    pattern_results.add_bc(bc_candidate, core, result[3])  # Add to results
+                    # Check if the candidate matches the pattern
 
-        if not matching_goals:
-            if verbose:
-                print(f"No goals match pattern '{pattern}'")
-            continue
-
-        if verbose:
-            print(f"Found {len(matching_goals)} goals matching pattern '{pattern}'")
-            print(f"Using BC candidate pattern: '{bc_candidate}'")
-
-        # Use unrealizable core subsets generator with matching goals
-        from bc_tool.goal_set_generators.unrealizable_core_goal_set_generator import UnrealizableCoreGoalSetGenerator
-        from bc_tool.bc_generators.pattern_bc_candidate_generator import PatternBCCandidateGenerator
-        from bc_tool.bc_checker import BoundaryConditionChecker
-
-        # Create goal set generator with the full spec
-        goal_set_generator = UnrealizableCoreGoalSetGenerator(spec_content=spec)
-
-        # Tell it to only use the matching goals
-        goal_set_generator.set_goals_to_use(matching_goals)
-
-        # Create BC candidate generator with the pattern
-        candidate_generator = PatternBCCandidateGenerator(
-            pattern=bc_candidate,
-            max_atoms=MAX_ATOMS
-        )
-
-        # Create BC checker with the original spec file
-        bc_checker = BoundaryConditionChecker(
-            spec_file_path=spec_file_path,
-            candidate_generator=candidate_generator,
-            goal_set_generator=goal_set_generator
-        )
-
-        # Find boundary conditions using only the matching goals
-        if verbose:
-            print(f"Searching for BCs using unrealizable cores of goals matching pattern '{pattern}'")
-
-        results = bc_checker.find_bcs(verbose=verbose, stop_on_first=False)
-
-        if verbose:
-            display_results(results, quiet=False)
-        return results
-
-    # Branch 2 - if no patterns matched, try interpolation
-    if verbose:
-        print("No patterns matched, trying interpolation-based BC search...\n")
+    print("Filtering out implied boundary conditions...")
+    pattern_results.filter_bcs()  # Filter out implied BCs
+    pattern_results.display()
+    return
 
     # Create spectra file to give to interpolator
     filename = json_to_spectra(spec_file_path)
@@ -130,7 +228,10 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         f"mv outputs/{filename} /data/interpolator_translated/{filename}'"
     )
 
-    if result.returncode != 0:
+    print(result.stdout.strip())
+    print(result.stderr.strip())
+
+    if len(result.stdout.strip().splitlines()) > 1 or len(result.stderr.strip()) > 0:
         print(f"The spec was malformed and the translator failed")
         return None
 
@@ -167,8 +268,6 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
 
     # Remove guarantees from the spec data
     spec_data = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
-    # If any line starts with a "G" with no spaces before it, put "assumption " before it (I think this is a bug in the translator)
-    spec_data = re.sub(r'(?m)^(G)', r'assumption \1', spec_data)
     # Extract assumptions from the spec data (between "assumption" and ";")
     assumptions = re.findall(r'assumption\s+(.*?);', spec_data, flags=re.DOTALL)
     # replace "next" with X    # replace "next" with X
@@ -189,6 +288,8 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
                 'parent_unreal_core': parent_unreal_core
             })
         parent_unreal_core = [re.sub(r'GF', 'G F', expr) for expr in parent_unreal_core]
+
+    # TODO: filter out duplicate candidates
 
     for entry in realizable_entries:
         refinement = eval(entry['refinement'])

@@ -1,9 +1,8 @@
-from typing import List, Iterator, Dict, Set
-
-from bc_tool.goal_set_generator import GoalSetGenerator
-from bc_tool.find_cores import find_cores
-from check_realizability import is_realizable
+from typing import List, Iterator, Dict
 import copy
+
+from bc_tool.compute_unrealizable_cores import compute_unrealizable_cores
+from bc_tool.goal_set_generator import GoalSetGenerator
 
 
 class UnrealizableCoreGoalSetGenerator(GoalSetGenerator):
@@ -26,39 +25,10 @@ class UnrealizableCoreGoalSetGenerator(GoalSetGenerator):
             goals: List of goal formulas to use instead of all goals from the spec
         """
         self._filtered_goals = goals
-        # Reset cached cores since we're changing the goals
-        self._compute_unrealizable_cores(goals)
-
-    def _compute_unrealizable_cores(self, goals: List[str]) -> List[List[str]]:
-        """Compute all unrealizable cores from the given goals.
-
-        Args:
-            goals: Complete list of goal formulas
-
-        Returns:
-            List of unrealizable cores, where each core is a list of goal formulas
-        """
-        if self._unrealizable_cores is not None:
-            return self._unrealizable_cores
-
-        print("Computing unrealizable cores from goals matching pattern...")
-
-        def is_goal_subset_unrealizable(goal_subset: Set[str]) -> bool:
-            """Check if a subset of goals makes the spec unrealizable."""
-            if not goal_subset:
-                return False
-
-            # Create a modified spec with only the subset of goals
-            modified_spec = copy.deepcopy(self.spec_content)
-            modified_spec["goals"] = list(goal_subset)
-
-            # Return True if unrealizable (for finding cores of unrealizability)
-            return not is_realizable(modified_spec)
-
-        # Find all minimal unrealizable cores
-        self._unrealizable_cores = find_cores(goals, is_goal_subset_unrealizable)
-        print(f"Found {len(self._unrealizable_cores)} unrealizable cores.")
-        return self._unrealizable_cores
+        # Create a modified spec with the filtered goals for core computation
+        modified_spec = copy.deepcopy(self.spec_content)
+        modified_spec["goals"] = goals
+        self._unrealizable_cores = compute_unrealizable_cores(modified_spec)
 
     def generate_goal_sets(self, goals: List[str]) -> Iterator[List[str]]:
         """Generate all unrealizable cores.
@@ -69,10 +39,9 @@ class UnrealizableCoreGoalSetGenerator(GoalSetGenerator):
         Yields:
             List[str]: Each unrealizable core as a list of goal formulas
         """
-        # Use filtered goals if set, otherwise use the provided goals
+        # Use filtered goals if set, otherwise compute cores from the spec's goals
         if self._unrealizable_cores is None:
-            print("Set goals to use before generating goal sets.")
-            return
+            self._unrealizable_cores = compute_unrealizable_cores(self.spec_content)
 
         if not self._unrealizable_cores:
             # If no unrealizable cores found, yield nothing

@@ -108,9 +108,12 @@ class BoundaryConditionChecker:
             candidate_count += 1
 
             if verbose:
-                print(f"\nCandidate {candidate_count}: {candidate}")
+                # Clear the entire line and then print the candidate
+                print(f"\r{' ' * 80}\r", end='', flush=True)  # Clear line first
+                print(f"Candidate {candidate_count}: {candidate}", end='', flush=True)
 
             # Test candidate against all goal sets
+            bc_found_for_candidate = False
             for goal_subset in self.goal_set_generator.generate_goal_sets(self.goals):
                 test_count += 1
 
@@ -129,6 +132,12 @@ class BoundaryConditionChecker:
                     is_unavoidable = detailed_results[5]
 
                     if is_boundary_condition:
+                        # BC found - print newline to keep the candidate line, then show result
+                        if verbose:
+                            print()  # Move to new line
+                            bc_type = "UBC" if is_unavoidable else "BC"
+                            print(f"  ✓ Found {bc_type} for {len(goal_subset)} goals: {goal_subset}")
+
                         result = BCResult(
                             candidate=candidate,
                             goal_subset=goal_subset,
@@ -137,10 +146,7 @@ class BoundaryConditionChecker:
                             detailed_results=detailed_results
                         )
                         results.append(result)
-
-                        if verbose:
-                            bc_type = "UBC" if is_unavoidable else "BC"
-                            print(f"  ✓ Found {bc_type} for {len(goal_subset)} goals: {goal_subset}")
+                        bc_found_for_candidate = True
 
                         if stop_on_first:
                             if verbose:
@@ -152,11 +158,13 @@ class BoundaryConditionChecker:
 
                 except Exception as e:
                     if verbose:
-                        print(f"  Error testing with {len(goal_subset)} goals: {e}")
+                        print(f"\n  Error testing with {len(goal_subset)} goals: {e}")
                     continue
 
+            # If no BC was found for this candidate, the line will be overwritten by the next candidate
+
         if verbose:
-            print("Finished testing all candidates.")
+            print("\nFinished testing all candidates.")
             print("Filtering results...")
         # Filter out BCs implied by other BCs and to remove duplicates
         results = self._filter_results(results)

@@ -39,7 +39,6 @@ def compute_unrealizable_cores(spec_content: Dict) -> List[List[str]]:
 
     # Find all minimal unrealizable cores
     unrealizable_cores = find_cores(goals, is_goal_subset_unrealizable)
-    print(f"Found {len(unrealizable_cores)} unrealizable cores.")
     return unrealizable_cores
 
 

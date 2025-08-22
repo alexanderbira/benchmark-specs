@@ -185,28 +185,7 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     print("Specification is not realizable, proceeding with BC search.\n")
 
     # Branch 1 - check if it matches pattern
-    pattern_results = Results(spec)
-    unrealizable_cores = compute_unrealizable_cores(spec)
-    for (bc_pattern, max_atoms) in patterns:
-        print(f"Checking pattern: {bc_pattern}")
-        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
-        i = 1
-        for bc_candidate in bc_candidates:
-            print(f"\nChecking BC candidate {i}: {bc_candidate}")
-            i += 1
-            for core in unrealizable_cores:
-                # Check if the current candidate is a (U)BC for the current unrealizable core
-                result = is_ubc(
-                    spec.get('domains', []),
-                    core,
-                    bc_candidate,
-                    spec.get('ins', []),
-                    spec.get('outs', [])
-                )
-                if result[4]:  # If it is a boundary condition
-                    print(f"Found boundary condition: {bc_candidate} for core {core}, is UBC: {result[3]}")
-                    pattern_results.add_bc(bc_candidate, core, result[3])  # Add to results
-                    # Check if the candidate matches the pattern
+    pattern_results = find_pattern_bcs(spec)
 
     print("Filtering out implied boundary conditions...")
     pattern_results.filter_bcs()  # Filter out implied BCs
@@ -352,6 +331,38 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
                 print(f"It is not a UBC")
 
     print("\nAll boundary conditions checked.")
+
+
+def find_pattern_bcs(spec):
+    pattern_results = Results(spec)
+    unrealizable_cores = compute_unrealizable_cores(spec)
+    print(f"Found {len(unrealizable_cores)} unrealizable cores:")
+    for i, core in enumerate(unrealizable_cores, 1):
+        print(f"Core {i}: {core}")
+    print()
+    for (bc_pattern, max_atoms) in patterns:
+        print(f"Checking pattern: {bc_pattern}")
+        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
+        i = 1
+        for bc_candidate in bc_candidates:
+            print(f"\nChecking BC candidate {i}: {bc_candidate}")
+            i += 1
+            for core in unrealizable_cores:
+                # Check if the current candidate is a (U)BC for the current unrealizable core
+                result = is_ubc(
+                    spec.get('domains', []),
+                    core,
+                    bc_candidate,
+                    spec.get('ins', []),
+                    spec.get('outs', [])
+                )
+                if result[4]:  # If it is a boundary condition
+                    print(
+                        f"Found {'unavoidable' if result[3] else 'avoidable'} boundary condition: {bc_candidate} for core {core}")
+                    pattern_results.add_bc(bc_candidate, core, result[3])  # Add to results
+                    # Check if the candidate matches the pattern
+
+    return pattern_results
 
 
 if __name__ == "__main__":

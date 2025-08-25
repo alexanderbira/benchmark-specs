@@ -6,20 +6,17 @@ import re
 from typing import List
 from collections import defaultdict
 
-import pandas as pd
-import os
 import spot
 
 from compute_unrealizable_cores import compute_unrealizable_cores
 from generate_pattern_candidates import generate_pattern_candidates
+from interpolation_tree import build_interpolation_tree
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
 from ubc_checker import is_ubc
 from check_realizability import is_realizable
 from spec_utils import load_spec_file
-from patterns import match_pattern
-from bc_tool.display_utils import display_results
 from to_spectra import json_to_spectra
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
@@ -31,7 +28,7 @@ patterns = [
 ]
 
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
-INTERPOLATOR_REPAIR_LIMIT = -1  # Maximum number of realizable refinements to generate
+INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
 
@@ -156,8 +153,11 @@ class Results:
     def display(self):
         """Display the results in a readable format."""
         print(f"Results for specification: {self.spec.get('name', 'Unknown')}")
-        print(f"Total Boundary Conditions found: {len(self.bcs)}\n")
-        print(f"Unavoidable Boundary Conditions: {sum(1 for bc in self.bcs if bc.unavoidable)}\n")
+        print(f"Total Boundary Conditions found: {len(self.bcs)}")
+        print(f"  Of which, {sum(1 for bc in self.bcs if bc.unavoidable)} are unavoidable")
+
+        if not self.bcs:
+            return
 
         # Group BCs by formula
         formula_groups = defaultdict(list)
@@ -190,7 +190,6 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
     print("Filtering out implied boundary conditions...")
     pattern_results.filter_bcs()  # Filter out implied BCs
     pattern_results.display()
-    return
 
     # Create spectra file to give to interpolator
     filename = json_to_spectra(spec_file_path)
@@ -241,96 +240,32 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         )
 
     # Find BCs from the interpolation results
+    interpolation_tree = build_interpolation_tree(
+        f"interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv"
+    )
 
     with open(f"interpolator_translated/{filename}", 'r') as f:
         spec_data = f.read()
 
     # Remove guarantees from the spec data
-    spec_data = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
+    spec_without_guarantees = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
+
     # Extract assumptions from the spec data (between "assumption" and ";")
-    assumptions = re.findall(r'assumption\s+(.*?);', spec_data, flags=re.DOTALL)
-    # replace "next" with X    # replace "next" with X
+    assumptions = re.findall(r'assumption\s+(.*?);', spec_without_guarantees, flags=re.DOTALL)
+    # replace "next" with X
     assumptions = [re.sub(r'next', 'X', expr.strip()) for expr in assumptions]
     # replace "GF" with "G F"
     assumptions = [re.sub(r'GF', 'G F', expr) for expr in assumptions]
 
-    # Get the realizable refinements from the interpolator output
-    interpolation_df = pd.read_csv(f"interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv")
-    realizable_entries = []
-    realizable_rows = interpolation_df[interpolation_df['is_realizable'] == True]
-    for _, row in realizable_rows.iterrows():
-        parent_row = interpolation_df[interpolation_df['node_id'] == row['parent_node_id']]
-        if not parent_row.empty:
-            parent_unreal_core = parent_row.iloc[0]['unreal_core']
-            realizable_entries.append({
-                'refinement': row['refinement'],
-                'parent_unreal_core': parent_unreal_core
-            })
-        parent_unreal_core = [re.sub(r'GF', 'G F', expr) for expr in parent_unreal_core]
+    # Process all refinements in the tree using DFS
+    print("Processing refinements in the interpolation tree...")
+    results = interpolation_tree.process_refinements_dfs(spec, assumptions, spec_without_guarantees)
 
-    # TODO: filter out duplicate candidates
+    print("Filtering out implied boundary conditions...")
+    results.filter_bcs()  # Filter out implied BCs
+    results.display()
 
-    for entry in realizable_entries:
-        refinement = eval(entry['refinement'])
-
-        parent_unreal_core = eval(entry['parent_unreal_core'])
-        # replace "next" with X
-        parent_unreal_core = [re.sub(r'next', 'X', expr.strip()) for expr in parent_unreal_core]
-        # replace "GF" with "G F"
-        for conjunct in refinement:
-            # replace "next" with X
-            phi = re.sub(r'next', 'X', conjunct)
-            # replace "alwEv" with G F
-            phi = re.sub(r'alwEv', 'G F', phi)
-            # replace "alw" with G
-            phi = re.sub(r'alw', 'G', phi)
-            phi = "!(" + phi + ")"
-
-            # Check if the candidate is a boundary condition
-            is_bc = is_ubc(assumptions, parent_unreal_core, phi, [], [])[4]
-            if not is_bc:
-                continue
-
-            print(f"\nFound boundary condition: {phi}")
-
-            # replace "alwEv" with G F
-            not_phi = re.sub(r'alwEv', 'GF', conjunct)
-            # replace "alw" with G
-            not_phi = re.sub(r'alw', 'G', not_phi)
-
-            spec_to_check = spec_data + "\nguarantee " + not_phi + ";"
-
-            # Write spec_to_check to a temporary file
-            temp_spec_filename = f"temp_spec_{hash(spec_to_check) % 10000}.spectra"
-            temp_spec_path = f"temp/{temp_spec_filename}"
-
-            # Ensure temp directory exists
-            Path("temp").mkdir(parents=True, exist_ok=True)
-
-            # Write the spec to the file
-            with open(temp_spec_path, 'w') as f:
-                f.write(spec_to_check)
-
-            # Run realizability check using Spectra container
-            result = run_in_spectra_container(
-                f"python", "-c",
-                f"\"from spectra_utils import check_realizability;"
-                f"result = check_realizability('/data/{temp_spec_path}', 60);"
-                f"print('REALIZABLE' if result else 'UNREALIZABLE')\""
-            )
-
-            if result.returncode != 0:
-                print(f"Error checking realizability: {result.stderr.strip()}")
-
-            # Clean up temporary file
-            os.unlink(temp_spec_path)
-
-            if "UNREALIZABLE" in result.stdout:
-                print(f"It is a UBC")
-            else:
-                print(f"It is not a UBC")
-
-    print("\nAll boundary conditions checked.")
+    return results
 
 
 def find_pattern_bcs(spec):

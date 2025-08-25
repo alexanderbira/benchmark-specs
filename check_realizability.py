@@ -1,12 +1,13 @@
-import sys
+import os
 from pathlib import Path
 from typing import Dict
-from run_strix import run_strix_from_spec
-from spec_utils import traverse_spec_files_with_content
+from run_strix import run_strix
+
+from bc_tool.run_in_interpolation_repair import run_in_interpolation_repair
 
 
-def is_realizable(spec_content: Dict) -> bool:
-    """Check if a specification is realizable.
+def is_strix_realizable(spec_content: Dict) -> bool:
+    """Check if a specification is realizable using Strix.
 
     Args:
         spec_content: The specification dictionary
@@ -14,43 +15,38 @@ def is_realizable(spec_content: Dict) -> bool:
     Returns:
         True if the specification is realizable, False otherwise
     """
-    try:
-        name, output = run_strix_from_spec(
-            spec_content,
-            "implication",
-            extra_args=["-r"],
-            capture_output=True
-        )
-        return output.strip() == "REALIZABLE"
-    except Exception:
-        return False
+    output = run_strix(
+        spec_content,
+        "implication",
+        extra_args=["-r"],
+    )
+    return output.strip() == "REALIZABLE"
 
+def is_spectra_realizable(spectra_spec: str) -> bool:
+    """Check if a specification is realizable using Spectra.
 
-def check_realizability_for_spec(spec_content: Dict) -> None:
-    """Check realizability for a single specification.
-    
     Args:
-        spec_content: The specification dictionary
+        spectra_spec: The specification in Spectra format
+
+    Returns:
+        True if the specification is realizable, False otherwise
     """
-    realizable = is_realizable(spec_content)
-    spec_name = spec_content.get("name", "unknown")
-    status = "REALIZABLE" if realizable else "NOT REALIZABLE"
-    print(f"{spec_name}: {status}")
 
+    # Write spec_to_check to a temporary file
+    Path("temp").mkdir(parents=True, exist_ok=True)
+    temp_spec_path = f"temp/temp_spec_{hash(spectra_spec) % 10000}.spectra"
+    with open(temp_spec_path, 'w') as f:
+        f.write(spectra_spec)
 
-def main():
-    """Main entry point for the realizability checker."""
-    if len(sys.argv) != 2:
-        print("Usage: python check_realizability.py <directory>")
-        sys.exit(1)
+    # Run realizability check using Spectra
+    result = run_in_interpolation_repair(
+        f"\"python -c \\\"from spectra_utils import check_realizability;print('REALIZABLE' if check_realizability('/data/{temp_spec_path}', 60) else 'UNREALIZABLE')\\\" \""
+    )
 
-    directory = Path(sys.argv[1])
-    if not directory.exists():
-        print(f"Error: Directory '{directory}' does not exist")
-        sys.exit(1)
+    if result.returncode != 0:
+        raise RuntimeError(f"Spectra realizability check failed: {result.stderr}")
 
-    traverse_spec_files_with_content(directory, check_realizability_for_spec)
+    # Clean up temporary file
+    os.unlink(temp_spec_path)
 
-
-if __name__ == "__main__":
-    main()
+    return "UNREALIZABLE" not in result.stdout

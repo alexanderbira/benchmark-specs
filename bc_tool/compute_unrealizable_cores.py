@@ -5,37 +5,41 @@ from pathlib import Path
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
-from check_realizability import is_realizable
+from check_realizability import is_strix_realizable
 
 
-def compute_unrealizable_cores(spec_content: Dict) -> List[List[str]]:
+def compute_unrealizable_cores(spec: dict) -> List[List[str]]:
     """Compute all unrealizable cores for a given specification.
 
     Args:
-        spec_content: The specification to analyze
+        spec: The specification dictionary
 
     Returns:
         List of unrealizable cores, where each core is a list of goal formulas
     """
-    print("Computing unrealizable cores...")
 
     # Extract goals from the spec
-    goals = spec_content.get("goals", [])
+    goals = spec.get("goals", [])
     if not goals:
-        print("No goals found in specification.")
         return []
 
     def is_goal_subset_unrealizable(goal_subset: Set[str]) -> bool:
-        """Check if a subset of goals makes the spec unrealizable."""
+        """Check if a subset of goals makes the spec unrealizable.
+
+        Args:
+            goal_subset: Subset of goal formulas to test
+        Returns:
+            True if the spec with this subset of goals is unrealizable, False otherwise
+        """
         if not goal_subset:
             return False
 
         # Create a modified spec with only the subset of goals
-        modified_spec = copy.deepcopy(spec_content)
+        modified_spec = copy.deepcopy(spec)
         modified_spec["goals"] = list(goal_subset)
 
         # Return True if unrealizable (for finding cores of unrealizability)
-        return not is_realizable(modified_spec)
+        return not is_strix_realizable(modified_spec)
 
     # Find all minimal unrealizable cores
     unrealizable_cores = find_cores(goals, is_goal_subset_unrealizable)
@@ -44,9 +48,13 @@ def compute_unrealizable_cores(spec_content: Dict) -> List[List[str]]:
 
 def find_cores(items, prop):
     """
-    items: iterable of elements (duplicates allowed)
-    prop: function taking a collection (list) of elements and returning True/False.
-    Returns: list of minimal subsets (each as a list of items).
+    Find all minimal subsets of 'items' that satisfy the property 'prop'.
+
+    Args:
+        items: iterable of elements (duplicates allowed)
+        prop: function taking a collection (list) of elements and returning True/False.
+    Returns:
+        list of minimal subsets (each as a list of items).
     """
     items = list(items)
     n = len(items)
@@ -64,7 +72,7 @@ def find_cores(items, prop):
         prop_cache[key] = bool(prop(subset))
         return prop_cache[key]
 
-    if not prop_idx(full):          # if the full set doesn't satisfy prop, no cores
+    if not prop_idx(full):  # if the full set doesn't satisfy prop, no cores
         return []
 
     seen = set()
@@ -82,7 +90,7 @@ def find_cores(items, prop):
             if prop_idx(new):
                 removed_any = True
                 shrink(new)
-        if not removed_any:          # cannot remove any single element -> minimal
+        if not removed_any:  # cannot remove any single element and preserve property -> minimal
             cores.add(key)
 
     shrink(set(full))

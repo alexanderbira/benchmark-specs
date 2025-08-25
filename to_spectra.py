@@ -1,22 +1,28 @@
 # Utility to convert a JSON file to a spectra file
-# May not produce fully valid spectra code, but it's close enough to debug manually
 
-import json
-import os
 import sys
+
+from pylogics.parsers import parse_ltl
+
 from patterns import find_pattern
 from remove_weak_until import remove_weak_until
 from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext, PropositionalTrue, \
     PropositionalFalse
 from pylogics.syntax.base import Implies, And, Or, Not, Equivalence
 
+from spec_utils import is_valid_spec, load_spec_file
+
+USE_DWYER_PATTERNS = False
 
 def formula_to_spectra_string(formula):
     """
     Convert a formula to a string representation suitable for Spectra.
 
-    :param formula: The LTL formula to convert.
-    :return: String representation of the formula.
+    Params:
+        formula: The LTL formula to convert.
+
+    Returns:
+        String representation of the formula.
     """
 
     if isinstance(formula, Atomic):
@@ -56,80 +62,89 @@ def formula_to_spectra_string(formula):
         return " ??? ".join([f"({formula_to_spectra_string(op)})" for op in formula.operands])
 
 
-def transform_expression(expr):
+def formula_to_spectra(formula):
     """Transform an LTL expression using both pattern matching and basic transformations."""
 
     # Remove weak until operators
-    expr = remove_weak_until(expr)
+    formula = remove_weak_until(formula)
 
     # Apply pattern matching transformation (returns the original formula if no pattern matches)
-    expr = find_pattern(expr, formula_to_spectra_string)
+    if USE_DWYER_PATTERNS:
+        formula = find_pattern(formula, formula_to_spectra_string)
+    else:
+        formula = formula_to_spectra_string(parse_ltl(formula))
 
-    return expr
+    return formula
 
 
-def json_to_spectra(input_path):
-    # Read JSON content
-    with open(input_path, 'r') as f:
-        data = json.load(f)
+def json_to_spectra(spec) -> str:
+    """Convert a JSON specification to a Spectra specification.
+
+    Args:
+        spec: the JSON specification dictionary
+
+    Returns:
+        The converted Spectra specification as a string.
+    """
+
+    # Validate spec
+    if not is_valid_spec(spec):
+        raise ValueError("Invalid specification format")
 
     # Extract values
-    name = data.get("name")
-    ins = data.get("ins", [])
-    outs = data.get("outs", [])
-    domains = data.get("domains", [])
-    goals = data.get("goals", [])
+    name = spec.get("name")
+    ins = spec.get("ins", [])
+    outs = spec.get("outs", [])
+    domains = spec.get("domains", [])
+    goals = spec.get("goals", [])
 
     # Build spectra output
-    lines = [f"module {''.join(c if c.isalnum() else '_' if c == ' ' else '' for c in name)}\n"]
+
+    lines = []
+
+    # Use the name as module name, replacing spaces with underscores and removing non-alphanumeric characters
+    lines.append(f"module {''.join(c if c.isalnum() else '_' if c == ' ' else '' for c in name)}\n")
+
+    # Declare the environment and system variables
     for var in ins:
         lines.append(f"env boolean {var};")
-    if ins:
-        lines.append("")
-
     for var in outs:
         lines.append(f"sys boolean {var};")
-    if outs:
-        lines.append("")
 
+    # Add assumptions and guarantees
     for asm in domains:
-        transformed = transform_expression(asm)
+        transformed = formula_to_spectra(asm)
         lines.append("assumption")
         lines.append(f"  {transformed};")
         lines.append("")
-
     for gar in goals:
-        transformed = transform_expression(gar)
+        transformed = formula_to_spectra(gar)
         lines.append("guarantee")
         lines.append(f"  {transformed};")
         lines.append("")
 
-    # Finalize output
+    # Join lines, removing empty lines and trailing spaces
     output = '\n'.join(line.rstrip() for line in lines if line.strip() != "") + '\n'
 
     # Append DwyerPatterns.spectra contents
-    with open('DwyerPatterns.spectra', 'r') as dwyer_file:
-        dwyer_content = dwyer_file.read()
-        output += '\n' + dwyer_content
+    if USE_DWYER_PATTERNS:
+        with open('DwyerPatterns.spectra', 'r') as dwyer_file:
+            dwyer_content = dwyer_file.read()
+            output += '\n' + dwyer_content
 
-    # Create translated directory if it doesn't exist
-    translated_dir = "translated"
-    os.makedirs(translated_dir, exist_ok=True)
-
-    # Write to output file in translated directory
-    base_name = os.path.splitext(os.path.basename(input_path))[0]
-    output_filename = os.path.join(translated_dir, f"{base_name}.spectra")
-    with open(output_filename, 'w') as f:
-        f.write(output)
-
-    print(f"Converted '{input_path}' to '{output_filename}'")
-    return f"{base_name}.spectra"
+    return output
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python json_to_spectra.py <input_file.json>")
+    if len(sys.argv) != 3:
+        print("Usage: python json_to_spectra.py <input_file (JSON)> <output_file (Spectra)>")
         sys.exit(1)
 
     input_file = sys.argv[1]
-    json_to_spectra(input_file)
+    output_file = sys.argv[2]
+
+    spec = load_spec_file(input_file)
+    spectra_spec = json_to_spectra(spec)
+
+    with open(output_file, "w") as f:
+        f.write(spectra_spec)

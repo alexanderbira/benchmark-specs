@@ -134,7 +134,7 @@ def find_pattern(formula: str, stringifier=formula_to_string):
 
     :param formula: The LTL formula to match.
     :param stringifier: A function to convert the formula to a string representation.
-    :return: The pattern function with its name and matched variables, or the original formula if no match is found.
+    :return: The pattern function with its name and matched variables, or the original formula formatted with the stringifier if no match is found.
 
     """
     found_pattern = False

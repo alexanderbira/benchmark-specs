@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Dict
 from spec_utils import traverse_spec_files_with_content
-from run_strix import run_strix_from_spec
+from run_strix import run_strix
 
 
 class SpecAnalyzer:
@@ -18,7 +18,7 @@ class SpecAnalyzer:
     def _check_conjunction_realizability(self, spec: Dict) -> str:
         """Check if the spec is realizable as a conjunction."""
         try:
-            _, output = run_strix_from_spec(
+            _, output = run_strix(
                 spec, 
                 "conjunction", 
                 extra_args=["-r"], 
@@ -31,7 +31,7 @@ class SpecAnalyzer:
     def _check_implication_realizability(self, spec: Dict) -> str:
         """Check if the spec is realizable as an implication."""
         try:
-            _, output = run_strix_from_spec(
+            _, output = run_strix(
                 spec, 
                 "implication", 
                 extra_args=["-r"], 

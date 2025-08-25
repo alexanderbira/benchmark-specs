@@ -19,7 +19,6 @@ def run_batch_pipeline(directory):
 
     Args:
         directory: Directory to search for spec files
-        goal_index_sets: List of goal index sets to use, or None to use all goals
     """
     spec_files = find_spec_files(directory)
 
@@ -31,21 +30,19 @@ def run_batch_pipeline(directory):
     print("\n")
 
     for spec_file in spec_files:
-        spec = load_spec_file(spec_file)
-
-        if not spec:
-            print(f"Failed to load specification from {spec_file}")
-            continue
-
         print("+"*80)
         print(f"\nRunning pipeline on: {spec_file}\n")
         print("+"*80)
 
         # Run the pipeline entry function
-        pipeline_entry(spec, spec_file)
+        pattern_results, interpolation_results = pipeline_entry(spec_file, True)
+
+        if pattern_results is not None:
+            pattern_results.display()
+        if interpolation_results is not None:
+            interpolation_results.display()
+
         print("\n\n")
-
-
 
 
 if __name__ == "__main__":

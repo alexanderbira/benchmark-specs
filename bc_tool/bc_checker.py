@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from spec_utils import load_spec_file
 from bc_candidate_generator import BCCandidateGenerator
 from goal_set_generator import GoalSetGenerator
-from ubc_checker import is_ubc
+from is_bc import is_ubc
 
 
 class BCResult:

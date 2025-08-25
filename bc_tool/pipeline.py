@@ -1,21 +1,19 @@
 import argparse
 import sys
 from pathlib import Path
-import subprocess
 import re
-from typing import List
-from collections import defaultdict
+from typing import Optional
 
-import spot
-
+from results import Results
+from run_in_interpolation_repair import run_in_interpolation_repair
 from compute_unrealizable_cores import compute_unrealizable_cores
 from generate_pattern_candidates import generate_pattern_candidates
 from interpolation_tree import build_interpolation_tree
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
-from ubc_checker import is_ubc
-from check_realizability import is_realizable
+from is_bc import is_bc
+from check_realizability import is_strix_realizable
 from spec_utils import load_spec_file
 from to_spectra import json_to_spectra
 
@@ -32,201 +30,150 @@ INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to ge
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
 
-def run_in_spectra_container(*commands):
-    """Run a command inside the spectra Docker container.
+def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optional[Results]):
+    """Run the pipeline on a spec file and return results.
 
     Args:
-        command: The command to run inside the container
+        spec_file_path: Path to the JSON specification file
+        verbose: Whether to print detailed output
 
     Returns:
-        subprocess.CompletedProcess: The result of the subprocess run
+        A tuple of (pattern_results, interpolation_results) where each is a Results object or None if not applicable
     """
-    cmd = " ".join([
-                       "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-                       "sh", "-c"
-                   ] + list(commands))
 
-    return subprocess.run(
-        cmd,
-        text=True,
-        capture_output=True,
-        shell=True,
-        executable="/bin/zsh"
-    )
-
-
-class Results:
-    """Class to hold results of the BC search."""
-
-    class BC:
-        """Class representing a Boundary Condition (BC)."""
-
-        def __init__(self, formula: str, goals: List[str], unavoidable: bool):
-            """Initialize a BC.
-
-            Args:
-                formula: The LTL formula representing the BC
-                goals: List of goals (by spec index) that the BC is checking against
-                unavoidable: Whether the BC is an unavoidable boundary condition
-            """
-            self.formula = formula
-            self.goals = goals
-            self.unavoidable = unavoidable
-
-    def __init__(self, spec: dict):
-        """Initialize an empty results container."""
-        self.spec = spec
-        self.bcs: List[Results.BC] = []  # List of Boundary Conditions
-
-    def add_bc(self, bc_formula: str, goals: List[str], unavoidable: bool):
-        """Add a Boundary Condition to the results."""
-        bc = self.BC(bc_formula, goals, unavoidable)
-        self.bcs.append(bc)
-
-    def _spot_implies(self, formula_a: str, formula_b: str) -> bool:
-        """Check if formula_a implies formula_b using Spot.
-
-        Args:
-            formula_a: The antecedent formula
-            formula_b: The consequent formula
-
-        Returns:
-            True if formula_a implies formula_b, False otherwise
-        """
-        try:
-            # Parse formulas using Spot
-            f_a = spot.formula(formula_a)
-            f_b = spot.formula(formula_b)
-
-            # Check if A implies B by checking if (A & !B) is unsatisfiable
-            # This is equivalent to checking if A -> B is a tautology
-            not_f_b = spot.formula.Not(f_b)
-            implication_check = spot.formula.And([f_a, not_f_b])
-
-            # Convert to automaton and check if it's empty (unsatisfiable)
-            aut = spot.translate(implication_check)
-            return aut.is_empty()
-
-        except Exception as e:
-            # If there's an error parsing or checking, assume no implication
-            # This is a conservative approach that keeps both formulas
-            print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
-            return False
-
-    def filter_bcs(self):
-        """Filter out BC candidates whose formulas are implied by other BCs with the same goals."""
-        # Group BCs by goal set, then remove implied formulas
-        goal_groups = defaultdict(list)
-        for bc in self.bcs:
-            goal_key = tuple(sorted(bc.goals))
-            goal_groups[goal_key].append(bc)
-
-        # For each group, remove BCs whose formula is implied by another BC's formula
-        final_bcs = []
-        for goal_key, group in goal_groups.items():
-            # First, remove equivalent BCs (same formula) from the group
-            unique_bcs = []
-            seen_formulas = set()
-            for bc in group:
-                if bc.formula not in seen_formulas:
-                    seen_formulas.add(bc.formula)
-                    unique_bcs.append(bc)
-
-            # Now check for implications among the unique BCs
-            non_implied = []
-
-            for bc in unique_bcs:
-                # Check if this BC's formula is implied by any other BC in the same group
-                is_implied = False
-                for other_bc in unique_bcs:
-                    if bc != other_bc and self._spot_implies(other_bc.formula, bc.formula):
-                        is_implied = True
-                        break
-
-                if not is_implied:
-                    non_implied.append(bc)
-
-            final_bcs.extend(non_implied)
-
-        self.bcs = final_bcs
-
-    def display(self):
-        """Display the results in a readable format."""
-        print(f"Results for specification: {self.spec.get('name', 'Unknown')}")
-        print(f"Total Boundary Conditions found: {len(self.bcs)}")
-        print(f"  Of which, {sum(1 for bc in self.bcs if bc.unavoidable)} are unavoidable")
-
-        if not self.bcs:
-            return
-
-        # Group BCs by formula
-        formula_groups = defaultdict(list)
-        for bc in self.bcs:
-            formula_groups[bc.formula].append(bc)
-
-        print("Boundary Conditions grouped by formula:\n")
-        for i, (formula, bcs) in enumerate(formula_groups.items(), 1):
-            print(f"Formula {i}: {formula}")
-            print(f"  Goal sets:")
-            for bc in bcs:
-                unavoidable_str = " (UBC)" if bc.unavoidable else " (BC)"
-                print(f"    {bc.goals}{unavoidable_str}")
-            print()  # Empty line between formulas
-
-
-def pipeline_entry(spec, spec_file_path, verbose=True):
-    """Run the pipeline on a spec file and return results."""
+    # Load the specification file
+    spec = load_spec_file(spec_file_path)
+    if verbose:
+        print(f"Loaded specification: {spec.get('name', 'Unknown')}\n")
 
     # Check realizability of the specification
-    if is_realizable(spec):
+    if is_strix_realizable(spec):
         print("Specification is realizable, skipping BC search.")
-        return None
+        return None, None
 
-    print("Specification is not realizable, proceeding with BC search.\n")
+    if verbose:
+        print("Specification is not realizable, proceeding with BC search.\n")
 
-    # Branch 1 - check if it matches pattern
-    pattern_results = find_pattern_bcs(spec)
+    # Stage 1 - find BCs using known patterns
+    if verbose:
+        print("Searching for BCs using known BC patterns...\n")
+    pattern_results = find_pattern_bcs(spec, verbose)
 
-    print("Filtering out implied boundary conditions...")
-    pattern_results.filter_bcs()  # Filter out implied BCs
-    pattern_results.display()
+    # Stage 2 - find BCs using interpolation
+    if verbose:
+        print("Searching for BCs using interpolation...\n")
+    interpolation_results = find_interpolation_bcs(spec, verbose)
 
-    # Create spectra file to give to interpolator
-    filename = json_to_spectra(spec_file_path)
+    return pattern_results, interpolation_results
 
-    # Flatten the enums and Dwyer patterns in the spec with the interpolator translator
+
+def find_pattern_bcs(spec, verbose=True):
+    """Find BCs in the spec using known patterns.
+
+    Args:
+        spec: The JSON specification dictionary
+        verbose: Whether to print detailed output
+    Returns:
+        Results object containing found BCs
+    """
+
+    results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: pattern-based BCs")
+
+    if verbose:
+        print("Computing unrealizable cores...")
+
+    unrealizable_cores = compute_unrealizable_cores(spec)
+
+    if verbose:
+        print(f"Found {len(unrealizable_cores)} unrealizable cores:")
+
+        for i, core in enumerate(unrealizable_cores, 1):
+            print(f"Core {i}: {core}\n")
+
+    for (bc_pattern, max_atoms) in patterns:
+        if verbose:
+            print(f"Checking pattern: {bc_pattern}")
+
+        # Generate BC candidates from the pattern
+        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
+
+        i = 1
+        for bc_candidate in bc_candidates:
+            if verbose:
+                print(f"\nChecking BC candidate {i}: {bc_candidate}")
+            i += 1
+
+            for core in unrealizable_cores:
+
+                # Check if the current candidate is a (U)BC for the current unrealizable core
+                candidate_is_bc = is_bc(spec.get('domains', []), core, bc_candidate)
+
+                if candidate_is_bc:
+                    # Check if the candidate is unavoidable
+                    spec_copy = spec.copy()
+                    spec_copy['goals'] = f"! ({bc_candidate})"
+                    is_unavoidable = not is_strix_realizable(spec)
+                    if verbose:
+                        print(
+                            f"Found {'unavoidable' if is_unavoidable else 'avoidable'} boundary condition: {bc_candidate} for core {core}")
+                    results.add_bc(bc_candidate, core, is_unavoidable)  # Add to results
+
+    # Filter out implied BCs
+    if verbose:
+        print("\nFiltering out implied boundary conditions...")
+    results.filter_bcs()
+
+    return results
+
+
+def find_interpolation_bcs(spec, verbose=False):
+    spec_name = spec.get('name', 'unnamed_spec')
+
+    # Translate the JSON spec to Spectra format
+    spectra_spec = json_to_spectra(spec)
+    Path("translated").mkdir(parents=True, exist_ok=True)
+    spectra_path = f"translated/{spec_name}.spectra"
+    with open(spectra_path, 'w') as f:
+        f.write(spectra_spec)
+
+    # Convert the Spectra spec to a flattened format using the interpolation repair's translator
+    if verbose:
+        print(f"Flattening the spec with the interpolation repair translator...")
+
     Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
 
-    if verbose:
-        print(f"Flattening the spec '{filename}' using the interpolator translator...")
+    flattened_spec_path = f"interpolator_translated/{spec_name}.spectra"
 
-    result = run_in_spectra_container(
+    result = run_in_interpolation_repair(
         f"'cd translator && "
-        f"python spec_translator.py /data/translated/{filename} && "
-        f"mv outputs/{filename} /data/interpolator_translated/{filename}'"
+        f"python spec_translator.py /data/{spectra_path} && "
+        f"mv outputs/{spec_name}.spectra /data/{flattened_spec_path}'"
     )
 
-    print(result.stdout.strip())
-    print(result.stderr.strip())
-
     if len(result.stdout.strip().splitlines()) > 1 or len(result.stderr.strip()) > 0:
-        print(f"The spec was malformed and the translator failed")
+        print(f"The spec was malformed and the interpolation repair translator failed")
+        print(f"Translator stdout: {result.stdout.strip()}")
+        print(f"Translator stderr: {result.stderr.strip()}")
         return None
 
     if verbose:
-        print(f"Flattened spec saved to 'interpolator_translated/{filename}'\n")
+        print(f"Spec flattened successfully.\n")
+
+    # Run interpolation repair on the flattened spec
+    if verbose:
         print("Running the interpolator...")
 
-    # Now run the interpolator
-    result = run_in_spectra_container(
+    interpolation_nodes_path = f"interpolation_nodes/{spec_name}_interpolation_nodes.csv"
+
+    result = run_in_interpolation_repair(
         f"'python interpolation_repair.py "
-        f"-i /data/interpolator_translated/{filename} "
+        f"-i /data/{flattened_spec_path} "
         f"-o outputs "
         f"-t {INTERPOLATOR_TIMEOUT} "
         f"-rl {INTERPOLATOR_REPAIR_LIMIT} && "
         f"mv "
-        f"outputs/{filename.split('.')[0]}_interpolation_nodes.csv "
-        f"/data/interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'"
+        f"outputs/{spec_name}_interpolation_nodes.csv "
+        f"/data/{interpolation_nodes_path}'"
     )
 
     if result.returncode != 0:
@@ -234,81 +181,55 @@ def pipeline_entry(spec, spec_file_path, verbose=True):
         return None
 
     if verbose:
-        print(
-            f"Interpolation results saved to "
-            f"'interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv'\n"
-        )
+        print("Interpolation repair completed successfully.\n")
 
-    # Find BCs from the interpolation results
-    interpolation_tree = build_interpolation_tree(
-        f"interpolation_nodes/{filename.split('.')[0]}_interpolation_nodes.csv"
-    )
+    # Build the interpolation tree from the CSV file
+    if verbose:
+        print("Building interpolation tree from generated refinements...")
+    interpolation_tree = build_interpolation_tree(interpolation_nodes_path)
 
-    with open(f"interpolator_translated/{filename}", 'r') as f:
+    # Check the refinements in the tree for BCs
+    if verbose:
+        print("Checking refinements in the interpolation tree for BCs...")
+    with open(flattened_spec_path, 'r') as f:
         spec_data = f.read()
 
-    # Remove guarantees from the spec data
+    # Remove guarantees from the spec data (between "guarantee" and ";", inclusive)
     spec_without_guarantees = re.sub(r'guarantee\s+.*?;', '', spec_data, flags=re.DOTALL)
 
-    # Extract assumptions from the spec data (between "assumption" and ";")
+    # Extract assumptions from the spec data (between "assumption" and ";", exclusive)
     assumptions = re.findall(r'assumption\s+(.*?);', spec_without_guarantees, flags=re.DOTALL)
-    # replace "next" with X
+
+    # Remove Spectra-specific formula formatting
+    # Replace "next" with X
     assumptions = [re.sub(r'next', 'X', expr.strip()) for expr in assumptions]
-    # replace "GF" with "G F"
+    # Replace "GF" with "G F"
     assumptions = [re.sub(r'GF', 'G F', expr) for expr in assumptions]
 
     # Process all refinements in the tree using DFS
-    print("Processing refinements in the interpolation tree...")
-    results = interpolation_tree.process_refinements_dfs(spec, assumptions, spec_without_guarantees)
+    if verbose:
+        print("Looking for BCs using refinements in the interpolation tree...")
+    results = interpolation_tree.find_BCs(spec, assumptions, spec_without_guarantees, verbose)
 
-    print("Filtering out implied boundary conditions...")
-    results.filter_bcs()  # Filter out implied BCs
-    results.display()
+    # Filter out implied BCs
+    if verbose:
+        print("\nFiltering out implied boundary conditions...\n")
+    results.filter_bcs()
 
     return results
-
-
-def find_pattern_bcs(spec):
-    pattern_results = Results(spec)
-    unrealizable_cores = compute_unrealizable_cores(spec)
-    print(f"Found {len(unrealizable_cores)} unrealizable cores:")
-    for i, core in enumerate(unrealizable_cores, 1):
-        print(f"Core {i}: {core}")
-    print()
-    for (bc_pattern, max_atoms) in patterns:
-        print(f"Checking pattern: {bc_pattern}")
-        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
-        i = 1
-        for bc_candidate in bc_candidates:
-            print(f"\nChecking BC candidate {i}: {bc_candidate}")
-            i += 1
-            for core in unrealizable_cores:
-                # Check if the current candidate is a (U)BC for the current unrealizable core
-                result = is_ubc(
-                    spec.get('domains', []),
-                    core,
-                    bc_candidate,
-                    spec.get('ins', []),
-                    spec.get('outs', [])
-                )
-                if result[4]:  # If it is a boundary condition
-                    print(
-                        f"Found {'unavoidable' if result[3] else 'avoidable'} boundary condition: {bc_candidate} for core {core}")
-                    pattern_results.add_bc(bc_candidate, core, result[3])  # Add to results
-                    # Check if the candidate matches the pattern
-
-    return pattern_results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the BC tool pipeline on a specification file")
     parser.add_argument("spec_file", type=str, help="Path to the JSON specification file")
-
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
-    # Load the specification file
-    spec = load_spec_file(args.spec_file)
-    print(f"Loaded specification: {spec.get('name', 'Unknown')}\n")
-
     # Call the pipeline entry point
-    pipeline_entry(spec, args.spec_file)
+    pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.verbose)
+
+    if pattern_results is not None:
+        pattern_results.display()
+
+    if interpolation_results is not None:
+        interpolation_results.display()

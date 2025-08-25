@@ -1,10 +1,16 @@
+import sys
+
 import pandas as pd
 from typing import Dict, List, Optional, Any
 import ast
 import re
 from pathlib import Path
-import os
-import subprocess
+
+from bc_tool.run_in_interpolation_repair import run_in_interpolation_repair
+from bc_tool.results import Results
+
+sys.path.append(str(Path(__file__).parent.parent))
+from check_realizability import is_spectra_realizable
 
 
 class InterpolationNode:
@@ -74,23 +80,7 @@ class InterpolationTree:
         """Get all unrealizable nodes in the tree."""
         return [node for node in self.nodes.values() if not node.is_realizable]
 
-    def _run_in_spectra_container(self, command):
-        """Run a command inside the spectra Docker container."""
-        cmd = " ".join([
-            "docker run --platform=linux/amd64 --rm -v \"$PWD\":/data spectra-container",
-            "sh", "-c",
-            command
-        ])
-
-        return subprocess.run(
-            cmd,
-            text=True,
-            capture_output=True,
-            shell=True,
-            executable="/bin/zsh"
-        )
-
-    def check_refinement(self, assumptions, refinement, guarantees, spec_without_guarantees, results):
+    def _check_refinement(self, assumptions, refinement, guarantees, spec_without_guarantees, results, verbose):
         """Check if a refinement is a boundary condition and add to results if found."""
         # Create cache key using bc_candidate and guarantees
         cache_key = (refinement, tuple(guarantees))
@@ -107,16 +97,15 @@ class InterpolationTree:
         phi = re.sub(r'alw', 'G', phi)
         phi = "!(" + phi + ")"
 
-        print(f"\nChecking candidate: {phi} against guarantees: {guarantees}")
-        # NOTE: I think the guarantees are incorrect here - should be the parent's unreal core but it's not - check the hierarchy creation code.
-        # NOTE: the Dwyer patterns change the semantics of the spec - check on this w/ Fahim - example: the always true globally pattern with the fsm autopilot spec
+        if verbose:
+            print(f"\nChecking candidate: {phi} against guarantees: {guarantees}")
 
         # Import here to avoid circular imports
-        from ubc_checker import is_ubc
+        from is_bc import is_bc
 
         # Check if the candidate is a boundary condition
-        is_bc = is_ubc(assumptions, guarantees, phi, [], [])[4]
-        if not is_bc:
+        candidate_is_bc = is_bc(assumptions, guarantees, phi)
+        if not candidate_is_bc:
             self._check_refinement_cache[cache_key] = False
             return
 
@@ -126,50 +115,36 @@ class InterpolationTree:
         not_phi = re.sub(r'alw', 'G', not_phi)
         spec_to_check = spec_without_guarantees + "\nguarantee " + not_phi + ";"
 
-        # Write spec_to_check to a temporary file
-        temp_spec_filename = f"temp_spec_{hash(spec_to_check) % 10000}.spectra"
-        temp_spec_path = f"temp/{temp_spec_filename}"
-
-        # Ensure temp directory exists
-        Path("temp").mkdir(parents=True, exist_ok=True)
-
-        # Write the spec to the file
-        with open(temp_spec_path, 'w') as f:
-            f.write(spec_to_check)
-
-        # Run realizability check using Spectra container
-        result = self._run_in_spectra_container(
-            f"\"python -c \\\"from spectra_utils import check_realizability;print('REALIZABLE' if check_realizability('/data/{temp_spec_path}', 60) else 'UNREALIZABLE')\\\" \""
-        )
-
-        if result.returncode != 0:
-            print(f"Error checking realizability: {result.stderr.strip()}")
-
-        # Clean up temporary file
-        os.unlink(temp_spec_path)
-
-        is_ubc = "UNREALIZABLE" in result.stdout
+        is_ubc = not is_spectra_realizable(spec_to_check)
+        if verbose:
+            print(f"Found {'unavoidable' if is_ubc else 'avoidable'} BC: {phi} for guarantees: {guarantees}")
         results.add_bc(phi, guarantees, is_ubc)
 
-        # Mark as processed in cache (we don't need the return value anymore)
+        # Mark as processed in cache
         self._check_refinement_cache[cache_key] = True
 
-    def process_refinements_dfs(self, spec, assumptions, spec_without_guarantees):
-        """Process all refinements in the tree using DFS traversal and return Results."""
-        # Import here to avoid circular imports
-        from pipeline import Results
+    def find_BCs(self, spec, assumptions, spec_without_guarantees, verbose=False):
+        """
+        Process all refinements in the tree and return Results.
 
-        results = Results(spec)
+        Args:
+            spec: The original specification dictionary
+            assumptions: List of assumption formulas (LTL strings)
+            spec_without_guarantees: The specification without (guarantees in Spectra format)
+        """
+
+        results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: interpolation-based BCs")
 
         if not self.root:
-            print("No root node found in tree")
+            if verbose:
+                print("No root node found in tree")
             return results
 
-        self._process_node_dfs(self.root, assumptions, spec_without_guarantees, results)
+        self._process_node_dfs(self.root, assumptions, spec_without_guarantees, results, verbose)
 
         return results
 
-    def _process_node_dfs(self, node: InterpolationNode, assumptions, spec_without_guarantees, results):
+    def _process_node_dfs(self, node: InterpolationNode, assumptions, spec_without_guarantees, results, verbose):
         """Process a single node and its children using DFS."""
 
         # Skip root node refinements as they're always empty
@@ -185,11 +160,12 @@ class InterpolationTree:
 
                 # Process each refinement in this node
                 for refinement in node.refinement:
-                    self.check_refinement(assumptions, refinement, parent_unreal_core, spec_without_guarantees, results)
+                    self._check_refinement(assumptions, refinement, parent_unreal_core, spec_without_guarantees,
+                                           results, verbose)
 
         # Recursively process children (DFS)
         for child in node.children:
-            self._process_node_dfs(child, assumptions, spec_without_guarantees, results)
+            self._process_node_dfs(child, assumptions, spec_without_guarantees, results, verbose)
 
 
 def safe_eval(value):

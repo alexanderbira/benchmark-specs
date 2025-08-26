@@ -1,7 +1,7 @@
 # Benchmark Specifications
 [![Specification Analysis](https://img.shields.io/badge/Specification%20Analysis-Up--to--date-brightgreen?logo=github)](https://github.com/alexanderbira/benchmark-specs/actions/workflows/analysis.yml)
 
-This is a collection of LTL and GR(1) specifications, which can be used as benchmarks for requirements engineering algorithms, such as unrealizability checking, goal conflict detection, and boundary condition generation.
+This is a collection of LTL and GR(1) specifications, as well as tools for analysing them.
 
 Each test case is in the following JSON format:
 ```typescript
@@ -15,29 +15,7 @@ Each test case is in the following JSON format:
 }
 ```
 
-## Utility Scripts
-A few Python utility scripts are provided for format conversion, specification analysis, and boundary condition checking.
-
-### Core Utilities
-
-- **`run_strix.py`** - a wrapper for running [Strix](https://github.com/meyerphi/strix) from a JSON spec
-  
-  Usage: `python run_strix.py spec.json {conjunction|implication} [strix flags]`
-  
-  - `conjunction`: generates formula as `domains & goals`
-  - `implication`: generates formula as `domains -> goals`
-  - Assumes Strix is installed and available in PATH
-
-### Specification Analysis
-
-- **`check_realizability.py`** - batch realizability checking script that runs Strix on all valid JSON specs in a directory
-  
-  Usage: `python check_realizability.py [directory]`
-  
-  - Automatically finds all valid specification files in the directory (recursively)
-  - Uses implication format (`domains -> goals`) with the `-r` flag for realizability checking
-  - Outputs results in format: `spec_name: REALIZABLE/UNREALIZABLE`
-
+## Analysis Scripts
 
 - **`run_analysis.py`** - analysis tool that extracts statistics from specification files and outputs to CSV - part of the CI pipeline for the repo
   
@@ -46,16 +24,30 @@ A few Python utility scripts are provided for format conversion, specification a
   - Analyzes all valid specification files in the directory (recursively)
   - Extracts multiple metrics for each specification:
     - Basic counts: domains, goals, environment/system variables
-    - Realizability: tests both `domains & goals` and `domains -> goals`
+    - Realizability: tests both `domains & goals` and `domains -> goals` with Strix.
     - Formula complexity: total and maximum variable/operator counts per formula
 
 
-- (U)BC Detection: See [bc_tool](lib/README.md) for details on boundary condition and unavoidable boundary condition detection.
-### Conversion Utilities
-
-- **`to_spectra.py`** - converts a JSON spec to a `.spectra`-like spec
+- **`pipeline.py`** - runs a (U)BC detection pipeline on a given specification file
   
-  Usage: `python to_spectra.py spec.json`
+  Usage: `python pipeline.py spec.json [-v, --verbose]`
+  
+  - Checks if the specification is realizable, if so, exits
+  - Computes the unrealizable cores for the specification
+  - Uses pre-defined BC patterns to detect boundary conditions against the unrealizable cores
+  - Converts the specification Spectra, converts it to a boolean spec with the [Interpolation Repair](https://github.com/Noobcoder64/interpolation-repair) repo, then runs interpolation repair to generate assumptions refinements for the spec
+  - Tests if the refinements can be negated to form unavoidable boundary conditions (UBCs) for the unrealizable cores of the nodes for which they were generated
+  - Options:
+    - `-v, --verbose`: enable verbose output
+
+
+- **`batch_runner.py`** - runs the pipeline on all specifications in a given directory and summarises some stats
+  
+  Usage: `python batch_runner.py [directory]`
+  
+  - Runs the pipeline on all valid specification files in the directory (recursively)
+  - Options:
+    - `directory`: directory to search for specification files (default: current directory)
 
 ## Syfco
 [Syfco](https://github.com/reactive-systems/syfco) is used to convert from the TLSF format. This repo has a Docker file to allow for syfco to run on any machine.

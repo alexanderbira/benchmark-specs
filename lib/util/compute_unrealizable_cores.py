@@ -1,8 +1,10 @@
 # Different implementations of unrealizable-core-finding functions
 
 import copy
+import os
 from typing import List, Set
 
+from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.util.check_realizability import is_strix_realizable
 
 
@@ -95,3 +97,60 @@ def find_cores(items, prop):
 
     shrink(set(full))
     return [[items[i] for i in core] for core in sorted(cores)]
+
+
+def compute_spectra_unrealizable_cores(spec: str) -> List[List[int]]:
+    """
+    Compute all unrealizable cores for a given specification using Spectra.
+
+    Args:
+        spec: The specification in the Spectra format (as a string)
+
+    Returns:
+        List of unrealizable cores, where each core is a list of goal indices (0-based indices of guarantee statements)
+    """
+
+    # Write spec_to_check to a temporary file
+    temp_spec_path = f"temp/temp_spec_{hash(spec) % 10000}.spectra"
+    with open(temp_spec_path, 'w') as f:
+        f.write(spec)
+
+    # Run realizability check using Spectra
+    result = run_in_interpolation_repair(
+        f"\"python -c \\\"from spectra_utils import compute_all_unrealizable_cores; cores = compute_all_unrealizable_cores('/data/{temp_spec_path}'); [print('core: ' + ','.join(map(str, core))) for core in cores]\\\" \""
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Spectra unrealizable core computation failed: {result.stderr}")
+
+    # Clean up temporary file
+    os.unlink(temp_spec_path)
+
+    # Find all guarantee line numbers in the spec (1-based)
+    spec_lines = spec.split('\n')
+    guarantee_line_numbers = []
+    for i, line in enumerate(spec_lines, 1):  # 1-based line numbering
+        if line.strip().startswith('guarantee'):
+            guarantee_line_numbers.append(i)
+
+    # The output is now formatted as "core: num,num,num..." lines
+    # Parse it and convert line numbers to goal indices
+    cores = []
+    for line in result.stdout.strip().split('\n'):
+        if line.startswith('core: '):
+            # Print the core to stdout as requested
+            core_str = line[6:]  # Remove "core: " prefix
+            if core_str:
+                line_numbers = list(map(int, core_str.split(',')))
+                # Convert line numbers to goal indices
+                goal_indices = []
+                for line_num in line_numbers:
+                    try:
+                        goal_index = guarantee_line_numbers.index(line_num)
+                        goal_indices.append(goal_index)
+                    except ValueError:
+                        # Line number doesn't correspond to a guarantee - skip or handle error
+                        print(f"Warning: Line {line_num} does not correspond to a guarantee statement")
+                cores.append(goal_indices)
+
+    return cores

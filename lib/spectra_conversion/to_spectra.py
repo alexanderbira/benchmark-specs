@@ -1,5 +1,6 @@
 # Utility to convert a JSON file to a spectra file
 
+import os
 import sys
 
 from pylogics.parsers import parse_ltl
@@ -135,11 +136,13 @@ def json_to_spectra(spec) -> str:
 
     # Append DwyerPatterns.spectra contents
     if USE_DWYER_PATTERNS:
-        with open('DwyerPatterns.spectra', 'r') as dwyer_file:
+        dwyer_path = os.path.join(os.path.dirname(__file__), 'DwyerPatterns.spectra')
+        with open(dwyer_path, 'r') as dwyer_file:
             dwyer_content = dwyer_file.read()
             output += '\n' + dwyer_content
 
     return output
+
 
 def remove_weak_until(formula: str):
     """
@@ -202,6 +205,7 @@ def transform_weak_until(formula):
         return new_formula
     else:
         return formula
+
 
 # Command-line interface
 if __name__ == "__main__":

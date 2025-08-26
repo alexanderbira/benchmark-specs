@@ -1,26 +1,25 @@
 # Pipeline to find boundary conditions (BCs) in specifications
 
 import argparse
-from pathlib import Path
 import re
-from typing import Optional
 import time
+from pathlib import Path
+from typing import Optional
 
-from lib.bc.results import Results
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
-from lib.util.compute_unrealizable_cores import compute_unrealizable_cores
 from lib.bc.generate_pattern_candidates import generate_pattern_candidates
 from lib.bc.interpolation_tree import build_interpolation_tree
 from lib.bc.is_bc import is_bc
-from lib.util.check_realizability import is_strix_realizable
-from lib.util.spec_utils import load_spec_file
+from lib.bc.results import Results
 from lib.spectra_conversion.to_spectra import json_to_spectra
+from lib.util.check_realizability import is_strix_realizable
+from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_unrealizable_cores
+from lib.util.spec_utils import load_spec_file
 
 PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
 INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
-
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
 patterns = [
@@ -80,10 +79,10 @@ def find_pattern_bcs(spec, verbose=True):
     results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: pattern-based BCs")
 
     if verbose:
-        print("Computing unrealizable cores...")
+        print("Computing unrealizable cores (manually)...")
 
+    # Compute unrealizable cores manually
     unrealizable_cores = compute_unrealizable_cores(spec)
-
     if verbose:
         print(f"Found {len(unrealizable_cores)} unrealizable cores:")
 
@@ -91,6 +90,28 @@ def find_pattern_bcs(spec, verbose=True):
             print(f"Core {i}: {core}")
 
         print("")
+
+    # Cross-check with Spectra's unrealizable core computation
+    try:
+        if verbose:
+            print("Computing unrealizable cores (using Spectra)...")
+        spectra_spec = json_to_spectra(spec)
+        spectra_core_indices = compute_spectra_unrealizable_cores(spectra_spec)
+
+        manual_core_indices = [[spec['goals'].index(goal) for goal in core if goal in spec['goals']] for core in
+                               unrealizable_cores]
+        same_cores = all(sorted(core) in spectra_core_indices for core in manual_core_indices) and \
+                     all(sorted(core) in manual_core_indices for core in spectra_core_indices)
+        if verbose:
+            if same_cores:
+                print("Spectra unrealizable cores match manual computation.\n")
+            else:
+                print("Spectra unrealizable cores do NOT match manual computation.\n")
+                print(f"Spectra cores (by goal indices): {spectra_core_indices}")
+                print(f"Manual cores (by goal indices): {manual_core_indices}")
+    except RuntimeError as e:
+        if verbose:
+            print(f"Failed to compute unrealizable cores using Spectra\n")
 
     for bc_pattern in patterns:
         if verbose:
@@ -137,6 +158,8 @@ def find_interpolation_bcs(spec, verbose=False):
     spec_name = re.sub(r'\W+', '_', spec_name)  # Sanitize name for file paths
 
     # Translate the JSON spec to Spectra format
+    if verbose:
+        print("Translating the spec to Spectra format...")
     spectra_spec = json_to_spectra(spec)
     Path("temp/translated").mkdir(parents=True, exist_ok=True)
     spectra_path = f"temp/translated/{spec_name}.spectra"
@@ -158,9 +181,9 @@ def find_interpolation_bcs(spec, verbose=False):
     )
 
     if len(result.stdout.strip().splitlines()) > 1 or len(result.stderr.strip()) > 0:
-        print(f"The spec was malformed and the interpolation repair translator failed")
-        print(f"Translator stdout: {result.stdout.strip()}")
-        print(f"Translator stderr: {result.stderr.strip()}")
+        print(f"The spec was malformed and the interpolation repair translator failed\n")
+        print("Translator stdout:\n" + "\n".join(["> " + line for line in result.stdout.strip().splitlines()]))
+        print("\nTranslator stderr:\n" + "\n".join(["> " + line for line in result.stderr.strip().splitlines()]))
         return None
 
     # Run interpolation repair on the flattened spec
@@ -183,7 +206,9 @@ def find_interpolation_bcs(spec, verbose=False):
     )
 
     if result.returncode != 0:
-        print(f"Error running interpolator: {result.stderr.strip()}")
+        print(f"Error running interpolator")
+        print("Interpolator stdout:\n" + "\n".join(["> " + line for line in result.stdout.strip().splitlines()]))
+        print("\nInterpolator stderr:\n" + "\n".join(["> " + line for line in result.stderr.strip().splitlines()]))
         return None
 
     # Build the interpolation tree from the CSV file

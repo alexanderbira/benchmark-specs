@@ -18,11 +18,10 @@ class SpecAnalyzer:
     def _check_conjunction_realizability(self, spec: Dict) -> str:
         """Check if the spec is realizable as a conjunction."""
         try:
-            _, output = run_strix(
+            output = run_strix(
                 spec, 
                 "conjunction", 
                 extra_args=["-r"], 
-                capture_output=True
             )
             return output.strip()
         except Exception as e:
@@ -31,11 +30,10 @@ class SpecAnalyzer:
     def _check_implication_realizability(self, spec: Dict) -> str:
         """Check if the spec is realizable as an implication."""
         try:
-            _, output = run_strix(
+            output = run_strix(
                 spec, 
                 "implication", 
                 extra_args=["-r"], 
-                capture_output=True
             )
             return output.strip()
         except Exception as e:

@@ -137,8 +137,8 @@ def find_interpolation_bcs(spec, verbose=False):
 
     # Translate the JSON spec to Spectra format
     spectra_spec = json_to_spectra(spec)
-    Path("translated").mkdir(parents=True, exist_ok=True)
-    spectra_path = f"translated/{spec_name}.spectra"
+    Path("temp/translated").mkdir(parents=True, exist_ok=True)
+    spectra_path = f"temp/translated/{spec_name}.spectra"
     with open(spectra_path, 'w') as f:
         f.write(spectra_spec)
 
@@ -146,8 +146,8 @@ def find_interpolation_bcs(spec, verbose=False):
     if verbose:
         print(f"Flattening the spec with the interpolation repair translator...")
 
-    flattened_spec_path = f"interpolator_translated/{spec_name}.spectra"
-    Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
+    flattened_spec_path = f"temp/interpolator_translated/{spec_name}.spectra"
+    Path("temp/interpolator_translated").mkdir(parents=True, exist_ok=True)
     Path(flattened_spec_path).touch()
 
     result = run_in_interpolation_repair(
@@ -169,8 +169,8 @@ def find_interpolation_bcs(spec, verbose=False):
     if verbose:
         print("Running the interpolator...")
 
-    interpolation_nodes_path = f"interpolation_nodes/{spec_name}_interpolation_nodes.csv"
-    Path("interpolation_nodes").mkdir(parents=True, exist_ok=True)
+    interpolation_nodes_path = f"temp/interpolation_nodes/{spec_name}_interpolation_nodes.csv"
+    Path("temp/interpolation_nodes").mkdir(parents=True, exist_ok=True)
     Path(interpolation_nodes_path).touch()
 
     result = run_in_interpolation_repair(

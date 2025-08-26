@@ -9,7 +9,4 @@ __pycache__
 # Experiment logs and outputs
 results
 temp
-interpolation-outputs
-translated
-interpolation_nodes
-interpolator_translated
+analysis_results.csv

@@ -16,17 +16,18 @@ from lib.util.check_realizability import is_strix_realizable
 from lib.util.spec_utils import load_spec_file
 from lib.spectra_conversion.to_spectra import json_to_spectra
 
+PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
+INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
+INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
+REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
+
+
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
 patterns = [
     "F(c1)",  # Achieve-Avoid
     "F(c1 & ((!c2) U G(!c1)))",  # Retraction
     "(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)",
 ]
-
-PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
-INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
-INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
-REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
 
 def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optional[Results]):
@@ -43,7 +44,7 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
     # Load the specification file
     spec = load_spec_file(spec_file_path)
     if verbose:
-        print(f"Loaded specification: {spec.get('name', 'Unknown')}\n")
+        print(f"Loaded specification: {spec.get('name', 'Unknown')}")
 
     # Check realizability of the specification
     if is_strix_realizable(spec):
@@ -51,16 +52,16 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
         return None, None
 
     if verbose:
-        print("Specification is not realizable, proceeding with BC search.\n")
+        print("Specification is not realizable, proceeding with BC search.")
 
     # Stage 1 - find BCs using known patterns
     if verbose:
-        print("Searching for BCs using known BC patterns...\n")
+        print("\n**Searching for BCs using known BC patterns**\n")
     pattern_results = find_pattern_bcs(spec, verbose)
 
     # Stage 2 - find BCs using interpolation
     if verbose:
-        print("Searching for BCs using interpolation...\n")
+        print("\n**Searching for BCs using interpolation**\n")
     interpolation_results = find_interpolation_bcs(spec, verbose)
 
     return pattern_results, interpolation_results
@@ -87,7 +88,9 @@ def find_pattern_bcs(spec, verbose=True):
         print(f"Found {len(unrealizable_cores)} unrealizable cores:")
 
         for i, core in enumerate(unrealizable_cores, 1):
-            print(f"Core {i}: {core}\n")
+            print(f"Core {i}: {core}")
+
+        print("")
 
     for bc_pattern in patterns:
         if verbose:
@@ -160,9 +163,6 @@ def find_interpolation_bcs(spec, verbose=False):
         print(f"Translator stderr: {result.stderr.strip()}")
         return None
 
-    if verbose:
-        print(f"Spec flattened successfully.\n")
-
     # Run interpolation repair on the flattened spec
     if verbose:
         print("Running the interpolator...")
@@ -186,12 +186,9 @@ def find_interpolation_bcs(spec, verbose=False):
         print(f"Error running interpolator: {result.stderr.strip()}")
         return None
 
-    if verbose:
-        print("Interpolation repair completed successfully.\n")
-
     # Build the interpolation tree from the CSV file
     if verbose:
-        print("Building interpolation tree from generated refinements...")
+        print("\nBuilding interpolation tree from generated refinements...")
     interpolation_tree = build_interpolation_tree(interpolation_nodes_path)
 
     # Check the refinements in the tree for BCs
@@ -213,13 +210,11 @@ def find_interpolation_bcs(spec, verbose=False):
     assumptions = [re.sub(r'GF', 'G F', expr) for expr in assumptions]
 
     # Process all refinements in the tree using DFS
-    if verbose:
-        print("Looking for BCs using refinements in the interpolation tree...")
     results = interpolation_tree.find_bcs(spec, assumptions, spec_without_guarantees, verbose)
 
     # Filter out implied BCs
     if verbose:
-        print("\nFiltering out implied boundary conditions...\n")
+        print("\nFiltering out implied boundary conditions...")
     results.filter_bcs()
 
     return results

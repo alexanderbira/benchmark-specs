@@ -49,7 +49,7 @@ Each test case is in the following JSON format:
   - Options:
     - `directory`: directory to search for specification files (default: current directory)
 
-## Interpolation Repair
+## Setting Up Interpolation Repair
 The Interpolation Repair tool is used to generate assumption refinements for unrealizable GR(1) specifications. It is used in the pipeline to generate potential UBCs.
 1. Clone the repo
     ```shell
@@ -68,7 +68,7 @@ The Interpolation Repair tool is used to generate assumption refinements for unr
     docker build -t interpolation-repair -f Dockerfile .
     ```
 
-## Syfco
+## Setting Up Syfco
 [Syfco](https://github.com/reactive-systems/syfco) is used to convert from the TLSF format. This repo has a Docker file to allow for syfco to run on any machine.
 
 Build the Syfco container:
@@ -86,3 +86,32 @@ Create an alias for Syfco:
 alias syfco='docker run --platform=linux/amd64 --rm -v "$PWD":/data syfco-container'
 ```
 With the above command, you'll be able to just run e.g. `syfco --help` in the terminal.
+
+## Getting Started with the Analysis Scripts
+Prerequisites:
+- Docker
+- Python
+- Conda
+- Strix (accessible in PATH)
+
+1. Clone the repo
+    ```shell
+    git clone https://github.com/alexanderbira/benchmark-specs.git
+    ```
+2. Change into the directory
+    ```shell
+    cd benchmark-specs
+    ```
+3. Install Spot with Conda:
+    ```shell
+    conda install conda-forge::spot
+    ```
+4. Activate the conda environment
+    ```shell
+    conda activate [your_env_name]
+    ```
+5. Install the required Python packages
+    ```shell
+    pip install -r requirements.txt
+    ```
+6. Set up Interpolation Repair (see above)

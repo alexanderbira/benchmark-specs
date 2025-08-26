@@ -1,12 +1,11 @@
 import sys
 
 import pandas as pd
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 import ast
 import re
 from pathlib import Path
 
-from bc_tool.run_in_interpolation_repair import run_in_interpolation_repair
 from bc_tool.results import Results
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -80,7 +79,7 @@ class InterpolationTree:
         """Get all unrealizable nodes in the tree."""
         return [node for node in self.nodes.values() if not node.is_realizable]
 
-    def _check_refinement(self, assumptions, refinement, guarantees, spec_without_guarantees, results, verbose):
+    def _check_refinement(self, assumptions, refinement, guarantees, spec_without_guarantees, results):
         """Check if a refinement is a boundary condition and add to results if found."""
         # Create cache key using bc_candidate and guarantees
         cache_key = (refinement, tuple(guarantees))
@@ -96,9 +95,6 @@ class InterpolationTree:
         # replace "alw" with G
         phi = re.sub(r'alw', 'G', phi)
         phi = "!(" + phi + ")"
-
-        if verbose:
-            print(f"\nChecking candidate: {phi} against guarantees: {guarantees}")
 
         # Import here to avoid circular imports
         from is_bc import is_bc
@@ -116,14 +112,12 @@ class InterpolationTree:
         spec_to_check = spec_without_guarantees + "\nguarantee " + not_phi + ";"
 
         is_ubc = not is_spectra_realizable(spec_to_check)
-        if verbose:
-            print(f"Found {'unavoidable' if is_ubc else 'avoidable'} BC: {phi} for guarantees: {guarantees}")
         results.add_bc(phi, guarantees, is_ubc)
 
         # Mark as processed in cache
         self._check_refinement_cache[cache_key] = True
 
-    def find_BCs(self, spec, assumptions, spec_without_guarantees, verbose=False):
+    def find_bcs(self, spec, assumptions, spec_without_guarantees, verbose=False):
         """
         Process all refinements in the tree and return Results.
 
@@ -131,6 +125,7 @@ class InterpolationTree:
             spec: The original specification dictionary
             assumptions: List of assumption formulas (LTL strings)
             spec_without_guarantees: The specification without (guarantees in Spectra format)
+            verbose: Whether to print verbose output
         """
 
         results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: interpolation-based BCs")
@@ -140,11 +135,11 @@ class InterpolationTree:
                 print("No root node found in tree")
             return results
 
-        self._process_node_dfs(self.root, assumptions, spec_without_guarantees, results, verbose)
+        self._process_node_dfs(self.root, assumptions, spec_without_guarantees, results)
 
         return results
 
-    def _process_node_dfs(self, node: InterpolationNode, assumptions, spec_without_guarantees, results, verbose):
+    def _process_node_dfs(self, node: InterpolationNode, assumptions, spec_without_guarantees, results):
         """Process a single node and its children using DFS."""
 
         # Skip root node refinements as they're always empty
@@ -161,11 +156,11 @@ class InterpolationTree:
                 # Process each refinement in this node
                 for refinement in node.refinement:
                     self._check_refinement(assumptions, refinement, parent_unreal_core, spec_without_guarantees,
-                                           results, verbose)
+                                           results)
 
         # Recursively process children (DFS)
         for child in node.children:
-            self._process_node_dfs(child, assumptions, spec_without_guarantees, results, verbose)
+            self._process_node_dfs(child, assumptions, spec_without_guarantees, results)
 
 
 def safe_eval(value):

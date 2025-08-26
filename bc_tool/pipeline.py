@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import re
 from typing import Optional
+import time
 
 from results import Results
 from run_in_interpolation_repair import run_in_interpolation_repair
@@ -18,13 +19,13 @@ from spec_utils import load_spec_file
 from to_spectra import json_to_spectra
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
-# (BC candidate pattern, max atoms in conjunction)
 patterns = [
-    ("F(c1)", 5),  # Achieve-Avoid
-    ("F(c1 & ((!c2) U G(!c1)))", 3),  # Retraction
-    ("(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)", 1),
+    "F(c1)",  # Achieve-Avoid
+    "F(c1 & ((!c2) U G(!c1)))",  # Retraction
+    "(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)",
 ]
 
+PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
 INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
@@ -90,17 +91,24 @@ def find_pattern_bcs(spec, verbose=True):
         for i, core in enumerate(unrealizable_cores, 1):
             print(f"Core {i}: {core}\n")
 
-    for (bc_pattern, max_atoms) in patterns:
+    for bc_pattern in patterns:
         if verbose:
             print(f"Checking pattern: {bc_pattern}")
 
         # Generate BC candidates from the pattern
-        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), max_atoms)
+        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), -1)
+
+        # Add start time for timeout checking
+        start_time = time.time()
 
         i = 1
         for bc_candidate in bc_candidates:
-            if verbose:
-                print(f"\nChecking BC candidate {i}: {bc_candidate}")
+            # Check if timeout is exceeded
+            if time.time() - start_time > PATTERN_TIMEOUT:
+                if verbose:
+                    print(f"Timeout exceeded ({PATTERN_TIMEOUT}s) for pattern {bc_pattern}, moving to next pattern...")
+                break
+
             i += 1
 
             for core in unrealizable_cores:
@@ -113,9 +121,6 @@ def find_pattern_bcs(spec, verbose=True):
                     spec_copy = spec.copy()
                     spec_copy['goals'] = f"! ({bc_candidate})"
                     is_unavoidable = not is_strix_realizable(spec)
-                    if verbose:
-                        print(
-                            f"Found {'unavoidable' if is_unavoidable else 'avoidable'} boundary condition: {bc_candidate} for core {core}")
                     results.add_bc(bc_candidate, core, is_unavoidable)  # Add to results
 
     # Filter out implied BCs
@@ -128,6 +133,7 @@ def find_pattern_bcs(spec, verbose=True):
 
 def find_interpolation_bcs(spec, verbose=False):
     spec_name = spec.get('name', 'unnamed_spec')
+    spec_name = re.sub(r'\W+', '_', spec_name)  # Sanitize name for file paths
 
     # Translate the JSON spec to Spectra format
     spectra_spec = json_to_spectra(spec)
@@ -140,9 +146,9 @@ def find_interpolation_bcs(spec, verbose=False):
     if verbose:
         print(f"Flattening the spec with the interpolation repair translator...")
 
-    Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
-
     flattened_spec_path = f"interpolator_translated/{spec_name}.spectra"
+    Path("interpolator_translated").mkdir(parents=True, exist_ok=True)
+    Path(flattened_spec_path).touch()
 
     result = run_in_interpolation_repair(
         f"'cd translator && "
@@ -164,6 +170,8 @@ def find_interpolation_bcs(spec, verbose=False):
         print("Running the interpolator...")
 
     interpolation_nodes_path = f"interpolation_nodes/{spec_name}_interpolation_nodes.csv"
+    Path("interpolation_nodes").mkdir(parents=True, exist_ok=True)
+    Path(interpolation_nodes_path).touch()
 
     result = run_in_interpolation_repair(
         f"'python interpolation_repair.py "
@@ -209,7 +217,7 @@ def find_interpolation_bcs(spec, verbose=False):
     # Process all refinements in the tree using DFS
     if verbose:
         print("Looking for BCs using refinements in the interpolation tree...")
-    results = interpolation_tree.find_BCs(spec, assumptions, spec_without_guarantees, verbose)
+    results = interpolation_tree.find_bcs(spec, assumptions, spec_without_guarantees, verbose)
 
     # Filter out implied BCs
     if verbose:

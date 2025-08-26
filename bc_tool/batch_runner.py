@@ -3,16 +3,15 @@
 Batch runner for the BC tool pipeline - runs pipeline on all spec files in a directory.
 """
 
-import argparse
 import sys
 from pathlib import Path
-from collections import defaultdict
 
 # Add import for spec_utils from parent directory
 sys.path.append(str(Path(__file__).parent.parent))
 from spec_utils import find_spec_files, load_spec_file
 from bc_tool.pipeline import pipeline_entry
 
+VERBOSE = True
 
 def run_batch_pipeline(directory):
     """Run pipeline on all spec files in a directory and collect statistics.
@@ -35,7 +34,7 @@ def run_batch_pipeline(directory):
         print("+"*80)
 
         # Run the pipeline entry function
-        pattern_results, interpolation_results = pipeline_entry(spec_file, True)
+        pattern_results, interpolation_results = pipeline_entry(spec_file, VERBOSE)
 
         if pattern_results is not None:
             pattern_results.display()

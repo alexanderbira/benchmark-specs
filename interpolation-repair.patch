@@ -1,0 +1,109 @@
+From 48604d08333306f50fa38a902632a59c56f7ce3c Mon Sep 17 00:00:00 2001
+From: Alexander Biraben-Renard <ab1223@ic.ac.uk>
+Date: Tue, 26 Aug 2025 22:40:48 +0100
+Subject: [PATCH] apply changes for compatibility with benchmark spec BC
+ analysis pipeline
+
+---
+ Dockerfile                    | 22 ++++++++++++++++++++++
+ interpolation_repair.py       |  1 +
+ spectra_utils.py              | 19 +++++++++++++++++++
+ translator/spec_translator.py |  4 ++--
+ 4 files changed, 44 insertions(+), 2 deletions(-)
+ create mode 100644 Dockerfile
+
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 00000000..7df913b3
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,22 @@
++# Use amd64 since this is required for loading libcudd.so
++FROM --platform=linux/amd64 continuumio/miniconda3:main
++
++# Prevent interactive prompts during build
++ENV DEBIAN_FRONTEND=noninteractive
++
++# Install Java
++RUN apt-get update && \
++    apt-get install -y default-jre
++
++# Install Python packages
++RUN pip install jpype1 pyparsing numpy pandas
++RUN conda install conda-forge::spot
++
++# Copy project files to container
++COPY . /interpolation-repair
++
++# Set the repo as the working directory
++WORKDIR interpolation-repair
++
++# Set env to allow Java to find Spectra
++ENV LD_LIBRARY_PATH="/interpolation-repair/spectra"
+diff --git a/interpolation_repair.py b/interpolation_repair.py
+index 2def1153..ec21aecc 100644
+--- a/interpolation_repair.py
++++ b/interpolation_repair.py
+@@ -242,6 +242,7 @@ class InterpolationRepair:
+             "time_repair_core": node.time_repair_core,
+             "time_node": time_node,
+             "refinement": node.gr1_units,
++            "unreal_core": node.unreal_core,
+             "interpolant": node.interpolant,
+             "error": error,
+         }
+diff --git a/spectra_utils.py b/spectra_utils.py
+index 2f4082bb..d0aa7cd2 100644
+--- a/spectra_utils.py
++++ b/spectra_utils.py
+@@ -49,6 +49,25 @@ def compute_unrealizable_core(spec_file_path):
+ 
+     return line_nums
+ 
++def compute_all_unrealizable_cores(spec_file_path):
++    output = str(SpectraTool.computeAllUnrealizableCores(spec_file_path))
++
++    # Extract the core line numbers from the output
++    core_found = re.compile(r"< ([^>]*) >").findall(output)
++    if not core_found:
++        return None
++
++    # Parse the line numbers from the cores
++    cores = []
++    for core in core_found:
++        print("Core found:", core)
++        line_nums = [int(x) for x in core.split(" ")]
++        line_nums = list(set(line_nums))
++        line_nums.sort()
++        cores.append(line_nums)
++
++    return cores
++
+ def compute_assumptions_core(spec_file_path):
+     output = str(SpectraTool.computeAssumptionsCore(spec_file_path))
+     match = re.search(r"<\s*([^>]*)\s*>", output)
+diff --git a/translator/spec_translator.py b/translator/spec_translator.py
+index c66e8ebe..77bfdeb9 100644
+--- a/translator/spec_translator.py
++++ b/translator/spec_translator.py
+@@ -147,7 +147,7 @@ def parseComparison(t):
+     else:
+         # There is some next operator involved
+         # Previous ("Y") operators are dealt with in the relevant parser
+-        token_list = t._ParseResults__toklist
++        token_list = list(t)
+         index_X_operand = token_list.index("next") + 1
+         X_operand = t[index_X_operand]
+         if X_operand in env_variables:
+@@ -264,7 +264,7 @@ if not os.path.isdir(output_directory):
+     os.makedirs(output_directory)
+ 
+ directory, filename = os.path.split(input_path)
+-print "TRANSLATING: " + filename
++print("TRANSLATING: " + filename)
+ 
+ PATH_TO_JAR = "spec-translator.jar"
+ cmd = "java -jar {} -i {} -o {}".format(PATH_TO_JAR, input_path, output_directory)
+-- 
+2.39.5 (Apple Git-154)
+

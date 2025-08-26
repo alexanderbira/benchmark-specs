@@ -49,6 +49,25 @@ Each test case is in the following JSON format:
   - Options:
     - `directory`: directory to search for specification files (default: current directory)
 
+## Interpolation Repair
+The Interpolation Repair tool is used to generate assumption refinements for unrealizable GR(1) specifications. It is used in the pipeline to generate potential UBCs.
+1. Clone the repo
+    ```shell
+    git clone https://github.com/Noobcoder64/interpolation-repair
+    ```
+2. Change into the directory
+   ```shell
+    cd interpolation-repair
+   ```
+3. Apply the patch for compatibility with the analysis scripts
+    ```shell
+    git apply ../interpolation-repair.patch
+    ```
+4. Build the Docker image
+    ```shell
+    docker build -t interpolation-repair -f Dockerfile .
+    ```
+
 ## Syfco
 [Syfco](https://github.com/reactive-systems/syfco) is used to convert from the TLSF format. This repo has a Docker file to allow for syfco to run on any machine.
 

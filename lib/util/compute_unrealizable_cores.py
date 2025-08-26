@@ -1,15 +1,14 @@
+# Different implementations of unrealizable-core-finding functions
+
 import copy
 from typing import List, Set
-import sys
-from pathlib import Path
 
-# Add import for spec_utils from parent directory
-sys.path.append(str(Path(__file__).parent.parent))
-from check_realizability import is_strix_realizable
+from lib.util.check_realizability import is_strix_realizable
 
 
 def compute_unrealizable_cores(spec: dict) -> List[List[str]]:
-    """Compute all unrealizable cores for a given specification.
+    """
+    Compute all unrealizable cores for a given specification.
 
     Args:
         spec: The specification dictionary
@@ -24,7 +23,8 @@ def compute_unrealizable_cores(spec: dict) -> List[List[str]]:
         return []
 
     def is_goal_subset_unrealizable(goal_subset: Set[str]) -> bool:
-        """Check if a subset of goals makes the spec unrealizable.
+        """
+        Check if a subset of goals makes the spec unrealizable.
 
         Args:
             goal_subset: Subset of goal formulas to test

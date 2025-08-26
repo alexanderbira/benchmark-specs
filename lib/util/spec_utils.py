@@ -1,4 +1,4 @@
-"""Utility functions for working with specification files."""
+# Utility functions for working with JSON specification files
 
 import json
 import os
@@ -7,7 +7,8 @@ from typing import Callable, Dict, List, Union
 
 
 def is_valid_spec(spec: dict) -> bool:
-    """Check if a JSON file is a valid specification file.
+    """
+    Check if a JSON file is a valid specification file.
     
     Args:
         spec: The JSON specification dictionary to validate
@@ -72,27 +73,12 @@ def find_spec_files(directory: Union[str, Path]) -> List[Path]:
     return spec_files
 
 
-def traverse_spec_files(directory: Union[str, Path], process_func: Callable[[Path], None]) -> None:
-    """Traverse all valid specification files in a directory and apply a function to each.
-    
-    Args:
-        directory: Directory to search for spec files
-        process_func: Function to apply to each spec file path
-    """
-    spec_files = find_spec_files(directory)
-
-    for spec_file in spec_files:
-        try:
-            process_func(spec_file)
-        except Exception as e:
-            print(f"Error processing {spec_file}: {e}")
-
-
 def traverse_spec_files_with_content(
         directory: Union[str, Path],
         process_func: Callable[[Dict], None]
 ) -> None:
-    """Traverse all valid specification files and apply a function with loaded content.
+    """
+    Traverse all valid specification files and apply a function with loaded content.
     
     Args:
         directory: Directory to search for spec files

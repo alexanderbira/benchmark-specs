@@ -1,6 +1,8 @@
-from typing import Iterator
-from itertools import combinations, product
+# Generates pattern candidates by filling conjunction placeholders in a given pattern string
+
 import re
+from itertools import combinations, product
+from typing import Iterator
 
 
 def generate_pattern_candidates(pattern: str, input_vars: list, max_atoms: int = 3) -> Iterator[str]:
@@ -36,9 +38,8 @@ def generate_pattern_candidates(pattern: str, input_vars: list, max_atoms: int =
     else:
         max_size = min(max_atoms, len(input_vars))
 
-    # Generate all possible conjunctions for each placeholder
     def generate_conjunction_options():
-        """Generate all possible conjunction strings."""
+        """Generates all possible conjunction strings"""
         conjunctions = []
         for num_atoms in range(1, max_size + 1):
             for atom_combo in combinations(input_vars, num_atoms):

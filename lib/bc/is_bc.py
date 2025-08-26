@@ -1,7 +1,17 @@
+# Checks if a formula is a boundary conditions for given assumptions and guarantees
+
 import spot
 
+
 def check_sat(formula: str) -> bool:
-    """Check if a single formula is satisfiable using Spot."""
+    """
+    Check if a single formula is satisfiable using Spot.
+
+    Args:
+        formula: The LTL formula as a string
+    Returns:
+        True if the formula is satisfiable, False otherwise
+    """
     formula = spot.formula(formula)
     aut = spot.translate(formula)
     return not aut.is_empty()

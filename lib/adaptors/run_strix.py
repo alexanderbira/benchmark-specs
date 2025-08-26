@@ -1,15 +1,17 @@
-# Utility to run Strix using a JSON file from this repo
+# Adaptor to run Strix using a JSON file
 
 import argparse
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
-from spec_utils import load_spec_file
+from typing import List, Optional
+
+from lib.util.spec_utils import load_spec_file
+
 
 def run_strix(
-    spec: dict,
-    formula_type: str,
-    extra_args: Optional[List[str]] = None,
+        spec: dict,
+        formula_type: str,
+        extra_args: Optional[List[str]] = None,
 ) -> str:
     """Run Strix with a specification dictionary.
     
@@ -28,6 +30,7 @@ def run_strix(
     if extra_args is None:
         extra_args = []
 
+    # Treat goals and domains as conjunctions of their elements
     all_domains = ' & '.join(f"({d})" for d in spec.get("domains", []))
     all_goals = ' & '.join(f"({g})" for g in spec.get("goals", []))
 
@@ -42,15 +45,17 @@ def run_strix(
     outs = ','.join(spec.get("outs", []))
 
     cmd = [
-        "strix",
-        "-f", formula,
-        "--ins=" + ins,
-        "--outs=" + outs
-    ] + extra_args
+              "strix",
+              "-f", formula,
+              "--ins=" + ins,
+              "--outs=" + outs
+          ] + extra_args
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return result.stdout.strip()
 
+
+# Command-line interface to run Strix with a JSON spec file
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run Strix with spec from JSON.",

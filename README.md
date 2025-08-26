@@ -50,7 +50,7 @@ A few Python utility scripts are provided for format conversion, specification a
     - Formula complexity: total and maximum variable/operator counts per formula
 
 
-- (U)BC Detection: See [bc_tool](bc_tool/README.md) for details on boundary condition and unavoidable boundary condition detection.
+- (U)BC Detection: See [bc_tool](lib/README.md) for details on boundary condition and unavoidable boundary condition detection.
 ### Conversion Utilities
 
 - **`to_spectra.py`** - converts a JSON spec to a `.spectra`-like spec

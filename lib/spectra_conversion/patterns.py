@@ -1,20 +1,25 @@
 # Utility for matching LTL formulas against predefined patterns
 
 import re
+
 import spot
 from pylogics.parsers import parse_ltl
-from pylogics.syntax.ltl import Always, Eventually, Release, Until, Next, Atomic, WeakNext, PropositionalTrue, \
-    PropositionalFalse, WeakUntil
-from pylogics.syntax.base import Implies, And, Or, Not, Equivalence
-from extracted_patterns import patterns
+from pylogics.syntax.base import And, Equivalence, Implies, Not, Or
+from pylogics.syntax.ltl import Always, Atomic, Eventually, Next, PropositionalFalse, PropositionalTrue, Release, Until, \
+    WeakNext, WeakUntil
+
+from lib.spectra_conversion.extracted_patterns import patterns
 
 
 def formula_to_string(formula):
     """
     Convert a formula to a string representation.
 
-    :param formula: The LTL formula to convert.
-    :return: String representation of the formula, using symbols for operators.
+    Args:
+        formula: The LTL formula to convert (as a pylogics formula object).
+
+    Returns:
+        String representation of the formula, using symbols for operators.
     """
 
     if isinstance(formula, Atomic):
@@ -57,20 +62,23 @@ def formula_to_string(formula):
 # Atomics in the patterns are placeholders for sub-formulas
 # Returns the matched formula or None if no match is found
 # E.g. match_pattern("G ((G x) -> F(y || x))", "G (P -> F Q)") -> {"P": "G x", "Q": "y || x"}
-# Note: only syntactic structure is matched, not semantic equivalence (since that is a much harder problem)
-def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string, nenof: bool = False):
+# Note: only syntactic structure is matched, not semantic equivalence
+def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string, nnf: bool = False):
     """
     Match a formula against a pattern formula.
 
-    :param formula: The LTL formula to match.
-    :param pattern_formula: The pattern formula to match against.
-    :param stringifier: A function to convert the formula to a string representation.
-    :param nenof: If True, convert the formula and pattern to negative normal form before matching.
-    :return: A dictionary of matched variables or None if no match is found.
+    Args:
+        formula: The LTL formula to match.
+        pattern_formula: The pattern formula to match against.
+        stringifier: A function to convert the formula to a string representation.
+        nnf: If True, convert the formula and pattern to negative normal form before matching.
+
+    Returns:
+        A dictionary of matched variables or None if no match is found.
     """
 
     # Parse the formula and the pattern formula
-    if nenof:
+    if nnf:
         formula = f"{spot.formula(formula).negative_normal_form():p}"
         pattern_formula = f"{spot.formula(pattern_formula).negative_normal_form():p}"
     parsed_formula = parse_ltl(formula)
@@ -93,14 +101,14 @@ def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_str
                 return True
         elif isinstance(formula, type(pattern)):
             # If both are of the same type, check their operands
-            if hasattr(pattern, 'operands'):
+            if hasattr(pattern, 'operands'):  # e.g., And, Or, Implies, Equivalence, Until, Release, WeakUntil
                 if len(formula.operands) != len(pattern.operands):
                     return False
                 for f_op, p_op in zip(formula.operands, pattern.operands):
                     if not match_recursive(f_op, p_op):
                         return False
                 return True
-            elif hasattr(pattern, 'argument'):
+            elif hasattr(pattern, 'argument'):  # e.g., Not, Always, Eventually, Next, WeakNext
                 return match_recursive(formula.argument, pattern.argument)
         return False
 
@@ -114,10 +122,13 @@ def fill_pattern(pattern: str, variables: dict, stringifier):
     """
     Fill a pattern with the matched variables.
 
-    :param pattern: The pattern function string to fill.
-    :param variables: A dictionary of matched variables.
-    :param stringifier: A function to convert the formula to a string representation.
-    :return: The filled pattern string.
+    Args:
+        pattern: The pattern function string to fill.
+        variables: A dictionary of matched variables.
+        stringifier: A function to convert the formula to a string representation.
+
+    Returns:
+        The filled pattern string.
     """
     match = re.search(r'\(([^)]*)\)', pattern)
     if match:
@@ -130,24 +141,27 @@ def fill_pattern(pattern: str, variables: dict, stringifier):
 
 def find_pattern(formula: str, stringifier=formula_to_string):
     """
-    Find a matching pattern for the given formula.
+    Find a matching pattern for the given formula (from the predefined patterns in extracted_patterns.py).
 
-    :param formula: The LTL formula to match.
-    :param stringifier: A function to convert the formula to a string representation.
-    :return: The pattern function with its name and matched variables, or the original formula formatted with the stringifier if no match is found.
+    Args:
+        formula: The LTL formula to match.
+        stringifier: A function to convert the formula to a string representation.
+
+    Returns:
+        The pattern function with its name and matched variables, or the original formula formatted with the stringifier if no match is found.
 
     """
     found_pattern = False
     output = formula
     for name, (pattern, func_name) in patterns.items():
         # without NNF
-        matched_vars = match_pattern(formula, pattern, nenof=False)
+        matched_vars = match_pattern(formula, pattern, nnf=False)
         if matched_vars:
             found_pattern = True
             output = fill_pattern(func_name, matched_vars, stringifier)
             break
         # with NNF
-        matched_vars = match_pattern(formula, pattern, nenof=True)
+        matched_vars = match_pattern(formula, pattern, nnf=True)
         if matched_vars:
             found_pattern = True
             output = fill_pattern(func_name, matched_vars, stringifier)
@@ -160,6 +174,7 @@ def find_pattern(formula: str, stringifier=formula_to_string):
     return output
 
 
+# Example usage
 if __name__ == "__main__":
     input_string = "G (p -> (q W s))"
     print(f"Input formula: {input_string}")

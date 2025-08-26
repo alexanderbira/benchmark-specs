@@ -1,13 +1,15 @@
-import os
-from pathlib import Path
-from typing import Dict
-from run_strix import run_strix
+# Different implementations of realizability-checking functions
 
-from bc_tool.run_in_interpolation_repair import run_in_interpolation_repair
+import os
+from typing import Dict
+
+from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
+from lib.adaptors.run_strix import run_strix
 
 
 def is_strix_realizable(spec_content: Dict) -> bool:
-    """Check if a specification is realizable using Strix.
+    """
+    Check if a specification is realizable using Strix.
 
     Args:
         spec_content: The specification dictionary
@@ -22,6 +24,7 @@ def is_strix_realizable(spec_content: Dict) -> bool:
     )
     return output.strip() == "REALIZABLE"
 
+
 def is_spectra_realizable(spectra_spec: str) -> bool:
     """Check if a specification is realizable using Spectra.
 
@@ -33,7 +36,6 @@ def is_spectra_realizable(spectra_spec: str) -> bool:
     """
 
     # Write spec_to_check to a temporary file
-    Path("temp").mkdir(parents=True, exist_ok=True)
     temp_spec_path = f"temp/temp_spec_{hash(spectra_spec) % 10000}.spectra"
     with open(temp_spec_path, 'w') as f:
         f.write(spectra_spec)

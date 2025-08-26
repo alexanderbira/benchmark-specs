@@ -1,3 +1,5 @@
+# The Results class is used to store and display boundary conditions collected during experiments
+
 from collections import defaultdict
 from typing import List
 
@@ -8,14 +10,14 @@ class Results:
     """Class to hold results of the BC search."""
 
     class BC:
-        """Class representing a Boundary Condition (BC)."""
+        """Class representing a Boundary Condition."""
 
         def __init__(self, formula: str, goals: List[str], unavoidable: bool):
             """Initialize a BC.
 
             Args:
                 formula: The LTL formula representing the BC
-                goals: List of goals (by spec index) that the BC is checking against
+                goals: List of goals that the BC is checking against
                 unavoidable: Whether the BC is an unavoidable boundary condition
             """
             self.formula = formula
@@ -35,39 +37,16 @@ class Results:
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
 
     def add_bc(self, bc_formula: str, goals: List[str], unavoidable: bool):
-        """Add a Boundary Condition to the results."""
-        bc = self.BC(bc_formula, goals, unavoidable)
-        self.bcs.append(bc)
-
-    def _spot_implies(self, formula_a: str, formula_b: str) -> bool:
-        """Check if formula_a implies formula_b using Spot.
+        """
+        Add a Boundary Condition to the results.
 
         Args:
-            formula_a: The antecedent formula
-            formula_b: The consequent formula
-
-        Returns:
-            True if formula_a implies formula_b, False otherwise
+            bc_formula: The LTL formula representing the BC
+            goals: List of goals that the BC is checking against
+            unavoidable: Whether the BC is an unavoidable boundary condition
         """
-        try:
-            # Parse formulas using Spot
-            f_a = spot.formula(formula_a)
-            f_b = spot.formula(formula_b)
-
-            # Check if A implies B by checking if (A & !B) is unsatisfiable
-            # This is equivalent to checking if A -> B is a tautology
-            not_f_b = spot.formula.Not(f_b)
-            implication_check = spot.formula.And([f_a, not_f_b])
-
-            # Convert to automaton and check if it's empty (unsatisfiable)
-            aut = spot.translate(implication_check)
-            return aut.is_empty()
-
-        except Exception as e:
-            # If there's an error parsing or checking, assume no implication
-            # This is a conservative approach that keeps both formulas
-            print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
-            return False
+        bc = self.BC(bc_formula, goals, unavoidable)
+        self.bcs.append(bc)
 
     def filter_bcs(self):
         """Filter out BC candidates whose formulas are implied by other BCs with the same goals."""
@@ -97,7 +76,8 @@ class Results:
                 for j, other_bc in enumerate(unique_bcs):
                     # If the other BC implies this one, mark as implied
                     # In case of equivalence, only keep the first one encountered
-                    if self._spot_implies(other_bc.formula, bc.formula) and (not self._spot_implies(bc.formula, other_bc.formula) or j < i):
+                    if spot_implies(other_bc.formula, bc.formula) and (
+                            not spot_implies(bc.formula, other_bc.formula) or j < i):
                         is_implied = True
                         break
 
@@ -130,3 +110,34 @@ class Results:
                 unavoidable_str = " (UBC)" if bc.unavoidable else " (BC)"
                 print(f"    {bc.goals}{unavoidable_str}")
             print()  # Empty line between formulas
+
+
+def spot_implies(formula_a: str, formula_b: str) -> bool:
+    """Check if formula_a implies formula_b using Spot.
+
+    Args:
+        formula_a: The antecedent formula
+        formula_b: The consequent formula
+
+    Returns:
+        True if formula_a implies formula_b, False otherwise
+    """
+    try:
+        # Parse formulas using Spot
+        f_a = spot.formula(formula_a)
+        f_b = spot.formula(formula_b)
+
+        # Check if A implies B by checking if (A & !B) is unsatisfiable
+        # This is equivalent to checking if A -> B is a tautology
+        not_f_b = spot.formula.Not(f_b)
+        implication_check = spot.formula.And([f_a, not_f_b])
+
+        # Convert to automaton and check if it's empty (unsatisfiable)
+        aut = spot.translate(implication_check)
+        return aut.is_empty()
+
+    except Exception as e:
+        # If there's an error parsing or checking, assume no implication
+        # This is a conservative approach that keeps both formulas
+        print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
+        return False

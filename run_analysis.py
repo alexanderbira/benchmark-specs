@@ -1,12 +1,13 @@
-"""Run analysis on specification files to generate statistics."""
+# Run analysis on specification files to generate statistics about them
 
 import csv
 import re
 import sys
 from pathlib import Path
 from typing import Dict
-from spec_utils import traverse_spec_files_with_content
-from run_strix import run_strix
+
+from lib.util.spec_utils import traverse_spec_files_with_content
+from lib.adaptors.run_strix import run_strix
 
 
 class SpecAnalyzer:

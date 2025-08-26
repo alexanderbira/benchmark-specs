@@ -1,15 +1,7 @@
-#!/usr/bin/env python3
-"""
-Batch runner for the BC tool pipeline - runs pipeline on all spec files in a directory.
-"""
+# Batch runner for the BC pipeline - runs pipeline on all spec files in a directory
 
-import sys
-from pathlib import Path
-
-# Add import for spec_utils from parent directory
-sys.path.append(str(Path(__file__).parent.parent))
-from spec_utils import find_spec_files, load_spec_file
-from bc_tool.pipeline import pipeline_entry
+from lib.util.spec_utils import find_spec_files
+from pipeline import pipeline_entry
 
 VERBOSE = True
 

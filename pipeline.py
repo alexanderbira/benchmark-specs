@@ -1,22 +1,20 @@
+# Pipeline to find boundary conditions (BCs) in specifications
+
 import argparse
-import sys
 from pathlib import Path
 import re
 from typing import Optional
 import time
 
-from results import Results
-from run_in_interpolation_repair import run_in_interpolation_repair
-from compute_unrealizable_cores import compute_unrealizable_cores
-from generate_pattern_candidates import generate_pattern_candidates
-from interpolation_tree import build_interpolation_tree
-
-# Add import for spec_utils from parent directory
-sys.path.append(str(Path(__file__).parent.parent))
-from is_bc import is_bc
-from check_realizability import is_strix_realizable
-from spec_utils import load_spec_file
-from to_spectra import json_to_spectra
+from lib.bc.results import Results
+from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
+from lib.util.compute_unrealizable_cores import compute_unrealizable_cores
+from lib.bc.generate_pattern_candidates import generate_pattern_candidates
+from lib.bc.interpolation_tree import build_interpolation_tree
+from lib.bc.is_bc import is_bc
+from lib.util.check_realizability import is_strix_realizable
+from lib.util.spec_utils import load_spec_file
+from lib.spectra_conversion.to_spectra import json_to_spectra
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
 patterns = [

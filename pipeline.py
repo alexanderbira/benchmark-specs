@@ -20,6 +20,8 @@ PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per patt
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
 INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
 REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
+USE_DWYER_PATTERNS = False  # Whether to use Dwyer patterns when converting to the Spectra format
+MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC pattern candidates (-1 for unlimited)
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
 patterns = [
@@ -95,7 +97,7 @@ def find_pattern_bcs(spec, verbose=True):
     try:
         if verbose:
             print("Computing unrealizable cores (using Spectra)...")
-        spectra_spec = json_to_spectra(spec)
+        spectra_spec = json_to_spectra(spec, USE_DWYER_PATTERNS)
         spectra_core_indices = compute_spectra_unrealizable_cores(spectra_spec)
 
         manual_core_indices = [[spec['goals'].index(goal) for goal in core if goal in spec['goals']] for core in
@@ -109,7 +111,7 @@ def find_pattern_bcs(spec, verbose=True):
                 print("Spectra unrealizable cores do NOT match manual computation.\n")
                 print(f"Spectra cores (by goal indices): {spectra_core_indices}")
                 print(f"Manual cores (by goal indices): {manual_core_indices}")
-    except RuntimeError as e:
+    except RuntimeError:
         if verbose:
             print(f"Failed to compute unrealizable cores using Spectra\n")
 
@@ -118,7 +120,7 @@ def find_pattern_bcs(spec, verbose=True):
             print(f"Checking pattern: {bc_pattern}")
 
         # Generate BC candidates from the pattern
-        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), -1)
+        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), MAX_PATTERN_CONJUNCTS)
 
         # Add start time for timeout checking
         start_time = time.time()
@@ -160,7 +162,7 @@ def find_interpolation_bcs(spec, verbose=False):
     # Translate the JSON spec to Spectra format
     if verbose:
         print("Translating the spec to Spectra format...")
-    spectra_spec = json_to_spectra(spec)
+    spectra_spec = json_to_spectra(spec, USE_DWYER_PATTERNS)
     Path("temp/translated").mkdir(parents=True, exist_ok=True)
     spectra_path = f"temp/translated/{spec_name}.spectra"
     with open(spectra_path, 'w') as f:
@@ -207,7 +209,6 @@ def find_interpolation_bcs(spec, verbose=False):
 
     if result.returncode != 0:
         print(f"Error running interpolator")
-        print("Interpolator stdout:\n" + "\n".join(["> " + line for line in result.stdout.strip().splitlines()]))
         print("\nInterpolator stderr:\n" + "\n".join(["> " + line for line in result.stderr.strip().splitlines()]))
         return None
 

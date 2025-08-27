@@ -5,12 +5,13 @@ import os
 from typing import List, Set
 
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
+from lib.spectra_conversion.to_spectra import json_to_spectra
 from lib.util.check_realizability import is_strix_realizable
 
 
-def compute_unrealizable_cores(spec: dict) -> List[List[str]]:
+def compute_strix_unrealizable_cores(spec: dict) -> List[List[str]]:
     """
-    Compute all unrealizable cores for a given specification.
+    Compute all unrealizable cores for a given specification, using Strix for realizability checks.
 
     Args:
         spec: The specification dictionary
@@ -99,21 +100,24 @@ def find_cores(items, prop):
     return [[items[i] for i in core] for core in sorted(cores)]
 
 
-def compute_spectra_unrealizable_cores(spec: str) -> List[List[int]]:
+def compute_spectra_unrealizable_cores(spec: dict) -> List[List[str]]:
     """
-    Compute all unrealizable cores for a given specification using Spectra.
+    Compute all unrealizable cores for a given specification.
 
     Args:
-        spec: The specification in the Spectra format (as a string)
+        spec: The specification dictionary
 
     Returns:
-        List of unrealizable cores, where each core is a list of goal indices (0-based indices of guarantee statements)
+        List of unrealizable cores, where each core is a list of goal formulas
     """
 
+    # Convert to spectra format
+    spectra_spec = json_to_spectra(spec)
+
     # Write spec_to_check to a temporary file
-    temp_spec_path = f"temp/temp_spec_{hash(spec) % 10000}.spectra"
+    temp_spec_path = f"temp/temp_spec_{hash(spectra_spec) % 10000}.spectra"
     with open(temp_spec_path, 'w') as f:
-        f.write(spec)
+        f.write(spectra_spec)
 
     # Run realizability check using Spectra
     result = run_in_interpolation_repair(
@@ -127,7 +131,7 @@ def compute_spectra_unrealizable_cores(spec: str) -> List[List[int]]:
     os.unlink(temp_spec_path)
 
     # Find all guarantee line numbers in the spec (1-based)
-    spec_lines = spec.split('\n')
+    spec_lines = spectra_spec.split('\n')
     guarantee_line_numbers = []
     for i, line in enumerate(spec_lines, 1):  # 1-based line numbering
         if line.strip().startswith('guarantee'):
@@ -153,4 +157,10 @@ def compute_spectra_unrealizable_cores(spec: str) -> List[List[int]]:
                         print(f"Warning: Line {line_num} does not correspond to a guarantee statement")
                 cores.append(goal_indices)
 
-    return cores
+    # Convert goal indices to actual goal formulas
+    unrealizable_cores = []
+    for core_indices in cores:
+        core_goals = [spec["goals"][i] for i in core_indices if i < len(spec["goals"])]
+        unrealizable_cores.append(core_goals)
+
+    return unrealizable_cores

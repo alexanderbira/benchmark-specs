@@ -80,6 +80,10 @@ def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_str
     # Parse the formula and the pattern formula
     if nnf:
         formula = f"{spot.formula(formula).negative_normal_form():p}"
+        if formula == "0":
+            formula = "false"
+        elif formula == "1":
+            formula = "true"
         pattern_formula = f"{spot.formula(pattern_formula).negative_normal_form():p}"
     parsed_formula = parse_ltl(formula)
     parsed_pattern = parse_ltl(pattern_formula)
@@ -168,9 +172,19 @@ def find_pattern(formula: str, stringifier=formula_to_string):
             break
 
     if not found_pattern:
-        # If no pattern matched, still use the stringifier to convert the formula
+        # If no pattern matched  still use the stringifier to convert the formula
         # since the stringifier might perform additional transformations
-        output = stringifier(parse_ltl(formula))
+
+        # convert to NNF
+        output = f"{spot.formula(formula).negative_normal_form():p}"
+        if output == "0":
+            output = "false"
+        elif output == "1":
+            output = "true"
+
+        # Format for Spectra
+        output = stringifier(parse_ltl(output))
+
     return output
 
 

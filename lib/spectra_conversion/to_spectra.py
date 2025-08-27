@@ -3,6 +3,7 @@
 import os
 import sys
 
+import spot
 from pylogics.parsers import parse_ltl
 from pylogics.syntax.base import And, Equivalence, Implies, Not, Or
 from pylogics.syntax.ltl import Always, Atomic, Eventually, Next, PropositionalFalse, PropositionalTrue, Release, Until, \
@@ -10,6 +11,7 @@ from pylogics.syntax.ltl import Always, Atomic, Eventually, Next, PropositionalF
 
 from lib.spectra_conversion.patterns import find_pattern, formula_to_string
 from lib.util.spec_utils import is_valid_spec, load_spec_file
+from parameters import USE_DWYER_PATTERNS
 
 
 def formula_to_spectra_string(formula):
@@ -60,13 +62,12 @@ def formula_to_spectra_string(formula):
         return " ??? ".join([f"({formula_to_spectra_string(op)})" for op in formula.operands])
 
 
-def formula_to_spectra(formula, use_dwyer_patterns) -> str:
+def formula_to_spectra(formula) -> str:
     """
     Transform an LTL expression using both pattern matching and basic transformations.
 
     Args:
         formula: The LTL formula as a string.
-        use_dwyer_patterns: Whether to apply Dwyer patterns or not
 
     Returns:
         The transformed formula as a string.
@@ -76,20 +77,27 @@ def formula_to_spectra(formula, use_dwyer_patterns) -> str:
     formula = remove_weak_until(formula)
 
     # Apply pattern matching transformation (returns the original formula if no pattern matches)
-    if use_dwyer_patterns:
+    if USE_DWYER_PATTERNS:
         formula = find_pattern(formula, formula_to_spectra_string)
     else:
+       # convert to NNF
+        formula = f"{spot.formula(formula).negative_normal_form():p}"
+        if formula == "0":
+            formula = "false"
+        elif formula == "1":
+            formula = "true"
+
+        # Format for Spectra
         formula = formula_to_spectra_string(parse_ltl(formula))
 
     return formula
 
 
-def json_to_spectra(spec, use_dwyer_patterns: bool) -> str:
+def json_to_spectra(spec) -> str:
     """Convert a JSON specification to a Spectra specification.
 
     Args:
         spec: the JSON specification dictionary
-        use_dwyer_patterns: Whether to apply Dwyer patterns or not
 
     Returns:
         The converted Spectra specification as a string.
@@ -121,12 +129,12 @@ def json_to_spectra(spec, use_dwyer_patterns: bool) -> str:
 
     # Add assumptions and guarantees
     for asm in domains:
-        transformed = formula_to_spectra(asm, use_dwyer_patterns)
+        transformed = formula_to_spectra(asm)
         lines.append("assumption")
         lines.append(f"  {transformed};")
         lines.append("")
     for gar in goals:
-        transformed = formula_to_spectra(gar, use_dwyer_patterns)
+        transformed = formula_to_spectra(gar)
         lines.append("guarantee")
         lines.append(f"  {transformed};")
         lines.append("")
@@ -135,7 +143,7 @@ def json_to_spectra(spec, use_dwyer_patterns: bool) -> str:
     output = '\n'.join(line.rstrip() for line in lines if line.strip() != "") + '\n'
 
     # Append DwyerPatterns.spectra contents
-    if use_dwyer_patterns:
+    if USE_DWYER_PATTERNS:
         dwyer_path = os.path.join(os.path.dirname(__file__), 'DwyerPatterns.spectra')
         with open(dwyer_path, 'r') as dwyer_file:
             dwyer_content = dwyer_file.read()

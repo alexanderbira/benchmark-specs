@@ -13,13 +13,12 @@ from lib.bc.is_bc import is_bc
 from lib.bc.results import Results
 from lib.spectra_conversion.is_spectra_compatible import is_spectra_compatible
 from lib.spectra_conversion.to_spectra import json_to_spectra
-from lib.util.check_realizability import is_strix_realizable
-from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_unrealizable_cores
+from lib.util.check_realizability import is_spectra_realizable, is_strix_realizable
+from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_strix_unrealizable_cores
 from lib.util.spec_utils import load_spec_file
 
-USE_DWYER_PATTERNS = False  # Whether to use Dwyer patterns when converting to the Spectra format
-
-PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
+PATTERN_TIMEOUT = -1  # Timeout for pattern-based BC search in seconds per pattern (-1 for unlimited)
+PATTERN_MAX_CANDIDATES = 100  # The maximum number of BC candidates to generate per pattern (-1 for unlimited)
 MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC pattern candidates (-1 for unlimited)
 
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
@@ -49,37 +48,55 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
     if verbose:
         print(f"Loaded specification: {spec.get('name', 'Unknown')}")
 
+    # List of (realizability_checker, unrealizable_core_computer, name) tuples
+    realizability_checker_core_computer_tool_names = [
+        (is_strix_realizable, compute_strix_unrealizable_cores, "strix"),  # Always include Strix-based checker
+    ]
+
+
     # Check if the spec is valid in Spectra
-    spectra_compatible = is_spectra_compatible(spec, USE_DWYER_PATTERNS)
-    if verbose:
-        print(f"Specification is {'' if spectra_compatible else 'NOT'} compatible with Spectra.")
+    if is_spectra_compatible(spec):
+        # If compatible, add Spectra-based checkers
+        print("Specification is compatible with Spectra.")
+        realizability_checker_core_computer_tool_names.append(
+            (is_spectra_realizable, compute_spectra_unrealizable_cores, "spectra")
+        )
+    else:
+        print("Specification is NOT compatible with Spectra.")
 
-    # Check realizability of the specification
-    if is_strix_realizable(spec):
-        print("Specification is realizable, skipping BC search.")
-        return None, None
+    for realizability_checker, unrealizable_core_computer, name in realizability_checker_core_computer_tool_names:
+        if verbose:
+            print(f"\n== Using {name}-based realizability checker and unrealizable core computer ==\n")
 
-    if verbose:
-        print("Specification is not realizable, proceeding with BC search.")
+        # Check realizability of the specification
+        if is_strix_realizable(spec):
+            print(f"Specification is realizable according to {name}, skipping pattern BC search with this tool.")
+            continue
 
-    # Stage 1 - find BCs using known patterns
-    if verbose:
-        print("\n**Searching for BCs using known BC patterns**\n")
-    pattern_results = find_pattern_bcs(spec, verbose)
+        if verbose:
+            print(f"Specification is not realizable according to {name}, proceeding with BC search.")
+
+        # Stage 1 - find BCs using known patterns
+        if verbose:
+            print("\n**Searching for BCs using known BC patterns**\n")
+        pattern_results = find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, verbose)
+        pattern_results.display()
 
     # Stage 2 - find BCs using interpolation
     if verbose:
         print("\n**Searching for BCs using interpolation**\n")
     interpolation_results = find_interpolation_bcs(spec, verbose)
 
-    return pattern_results, interpolation_results
+    return None, interpolation_results
 
 
-def find_pattern_bcs(spec, verbose=True):
+def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, verbose=True):
     """Find BCs in the spec using known patterns.
 
     Args:
         spec: The JSON specification dictionary
+        realizability_checker: Function to check realizability of a spec
+        unrealizable_core_computer: Function to compute unrealizable cores of a spec
         verbose: Whether to print detailed output
     Returns:
         Results object containing found BCs
@@ -88,10 +105,10 @@ def find_pattern_bcs(spec, verbose=True):
     results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: pattern-based BCs")
 
     if verbose:
-        print("Computing unrealizable cores (manually)...")
+        print("Computing unrealizable cores...")
 
-    # Compute unrealizable cores manually
-    unrealizable_cores = compute_unrealizable_cores(spec)
+    # Compute unrealizable cores
+    unrealizable_cores = unrealizable_core_computer(spec)
     if verbose:
         print(f"Found {len(unrealizable_cores)} unrealizable cores:")
 
@@ -99,28 +116,6 @@ def find_pattern_bcs(spec, verbose=True):
             print(f"Core {i}: {core}")
 
         print("")
-
-    # Cross-check with Spectra's unrealizable core computation
-    try:
-        if verbose:
-            print("Computing unrealizable cores (using Spectra)...")
-        spectra_spec = json_to_spectra(spec, USE_DWYER_PATTERNS)
-        spectra_core_indices = compute_spectra_unrealizable_cores(spectra_spec)
-
-        manual_core_indices = [[spec['goals'].index(goal) for goal in core if goal in spec['goals']] for core in
-                               unrealizable_cores]
-        same_cores = all(sorted(core) in spectra_core_indices for core in manual_core_indices) and \
-                     all(sorted(core) in manual_core_indices for core in spectra_core_indices)
-        if verbose:
-            if same_cores:
-                print("Spectra unrealizable cores match manual computation.\n")
-            else:
-                print("Spectra unrealizable cores do NOT match manual computation.\n")
-                print(f"Spectra cores (by goal indices): {spectra_core_indices}")
-                print(f"Manual cores (by goal indices): {manual_core_indices}")
-    except RuntimeError:
-        if verbose:
-            print(f"Failed to compute unrealizable cores using Spectra\n")
 
     for bc_pattern in patterns:
         if verbose:
@@ -135,9 +130,14 @@ def find_pattern_bcs(spec, verbose=True):
         i = 1
         for bc_candidate in bc_candidates:
             # Check if timeout is exceeded
-            if time.time() - start_time > PATTERN_TIMEOUT:
+            if time.time() - start_time > PATTERN_TIMEOUT != -1:
                 if verbose:
                     print(f"Timeout exceeded ({PATTERN_TIMEOUT}s) for pattern {bc_pattern}, moving to next pattern...")
+                break
+            if i > PATTERN_MAX_CANDIDATES != -1:
+                if verbose:
+                    print(f"Reached maximum number of candidates ({PATTERN_MAX_CANDIDATES}) for pattern {bc_pattern}, "
+                          f"moving to next pattern...")
                 break
 
             i += 1
@@ -150,8 +150,11 @@ def find_pattern_bcs(spec, verbose=True):
                 if candidate_is_bc:
                     # Check if the candidate is unavoidable
                     spec_copy = spec.copy()
-                    spec_copy['goals'] = f"! ({bc_candidate})"
-                    is_unavoidable = not is_strix_realizable(spec)
+                    spec_copy['goals'] = [f"! ({bc_candidate})"]
+                    try:
+                        is_unavoidable = not realizability_checker(spec_copy)
+                    except RuntimeError:
+                        is_unavoidable = None
                     results.add_bc(bc_candidate, core, is_unavoidable)  # Add to results
 
     # Filter out implied BCs
@@ -169,7 +172,7 @@ def find_interpolation_bcs(spec, verbose=False):
     # Translate the JSON spec to Spectra format
     if verbose:
         print("Translating the spec to Spectra format...")
-    spectra_spec = json_to_spectra(spec, USE_DWYER_PATTERNS)
+    spectra_spec = json_to_spectra(spec)
     Path("temp/translated").mkdir(parents=True, exist_ok=True)
     spectra_path = f"temp/translated/{spec_name}.spectra"
     with open(spectra_path, 'w') as f:

@@ -5,6 +5,7 @@ from typing import Dict
 
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.adaptors.run_strix import run_strix
+from lib.spectra_conversion.to_spectra import json_to_spectra
 
 SPECTRA_REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
 
@@ -27,8 +28,23 @@ def is_strix_realizable(spec_content: Dict) -> bool:
     return output.strip() == "REALIZABLE"
 
 
-def is_spectra_realizable(spectra_spec: str) -> bool:
-    """Check if a specification is realizable using Spectra.
+def is_spectra_realizable(spec_content: dict) -> bool:
+    """
+    Check if a specification is realizable using Spectra.
+
+    Args:
+        spec_content: The specification dictionary
+
+    Returns:
+        True if the specification is realizable, False otherwise
+    """
+
+    spectra_spec = json_to_spectra(spec_content)
+    return check_spectra_realizability(spectra_spec)
+
+
+def check_spectra_realizability(spectra_spec: str) -> bool:
+    """Check if a spectra specification is realizable using Spectra.
 
     Args:
         spectra_spec: The specification in Spectra format

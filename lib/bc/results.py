@@ -1,7 +1,7 @@
 # The Results class is used to store and display boundary conditions collected during experiments
 
 from collections import defaultdict
-from typing import List
+from typing import List, Optional
 
 import spot
 
@@ -12,7 +12,7 @@ class Results:
     class BC:
         """Class representing a Boundary Condition."""
 
-        def __init__(self, formula: str, goals: List[str], unavoidable: bool):
+        def __init__(self, formula: str, goals: List[str], unavoidable: Optional[bool]):
             """Initialize a BC.
 
             Args:
@@ -36,7 +36,7 @@ class Results:
         self.name = name
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
 
-    def add_bc(self, bc_formula: str, goals: List[str], unavoidable: bool):
+    def add_bc(self, bc_formula: str, goals: List[str], unavoidable: Optional[bool]):
         """
         Add a Boundary Condition to the results.
 
@@ -107,8 +107,8 @@ class Results:
             print(f"Formula {i}: {formula}")
             print(f"  Goal sets:")
             for bc in bcs:
-                unavoidable_str = " (UBC)" if bc.unavoidable else " (BC)"
-                print(f"    {bc.goals}{unavoidable_str}")
+                unavoidable_str = "(maybe UBC)" if bc.unavoidable is None else "(UBC)" if bc.unavoidable else "(BC)"
+                print(f"    {bc.goals} {unavoidable_str}")
             print()  # Empty line between formulas
 
 

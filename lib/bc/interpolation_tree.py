@@ -8,7 +8,7 @@ import pandas as pd
 
 from lib.bc.is_bc import is_bc
 from lib.bc.results import Results
-from lib.util.check_realizability import is_spectra_realizable
+from lib.util.check_realizability import check_spectra_realizability
 
 
 class InterpolationNode:
@@ -125,7 +125,7 @@ class InterpolationTree:
         not_phi = re.sub(r'alw', 'G', not_phi)
         spec_to_check = spec_without_guarantees + "\nguarantee " + not_phi + ";"
 
-        is_ubc = not is_spectra_realizable(spec_to_check)
+        is_ubc = not check_spectra_realizability(spec_to_check)
         results.add_bc(phi, guarantees, is_ubc)
 
         # Mark as processed in cache

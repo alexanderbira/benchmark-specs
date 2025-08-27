@@ -11,17 +11,19 @@ from lib.bc.generate_pattern_candidates import generate_pattern_candidates
 from lib.bc.interpolation_tree import build_interpolation_tree
 from lib.bc.is_bc import is_bc
 from lib.bc.results import Results
+from lib.spectra_conversion.is_spectra_compatible import is_spectra_compatible
 from lib.spectra_conversion.to_spectra import json_to_spectra
 from lib.util.check_realizability import is_strix_realizable
 from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_unrealizable_cores
 from lib.util.spec_utils import load_spec_file
 
+USE_DWYER_PATTERNS = False  # Whether to use Dwyer patterns when converting to the Spectra format
+
 PATTERN_TIMEOUT = 60  # Timeout for pattern-based BC search in seconds (per pattern)
+MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC pattern candidates (-1 for unlimited)
+
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
 INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
-REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
-USE_DWYER_PATTERNS = False  # Whether to use Dwyer patterns when converting to the Spectra format
-MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC pattern candidates (-1 for unlimited)
 
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
 patterns = [
@@ -46,6 +48,11 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
     spec = load_spec_file(spec_file_path)
     if verbose:
         print(f"Loaded specification: {spec.get('name', 'Unknown')}")
+
+    # Check if the spec is valid in Spectra
+    spectra_compatible = is_spectra_compatible(spec, USE_DWYER_PATTERNS)
+    if verbose:
+        print(f"Specification is {'' if spectra_compatible else 'NOT'} compatible with Spectra.")
 
     # Check realizability of the specification
     if is_strix_realizable(spec):

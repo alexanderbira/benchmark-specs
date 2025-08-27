@@ -6,6 +6,8 @@ from typing import Dict
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.adaptors.run_strix import run_strix
 
+SPECTRA_REALIZABILITY_CHECK_TIMEOUT = 60  # Timeout for realizability checks with Spectra in seconds
+
 
 def is_strix_realizable(spec_content: Dict) -> bool:
     """
@@ -31,6 +33,9 @@ def is_spectra_realizable(spectra_spec: str) -> bool:
     Args:
         spectra_spec: The specification in Spectra format
 
+    Throws:
+        RuntimeError: If the realizability check fails
+
     Returns:
         True if the specification is realizable, False otherwise
     """
@@ -42,7 +47,7 @@ def is_spectra_realizable(spectra_spec: str) -> bool:
 
     # Run realizability check using Spectra
     result = run_in_interpolation_repair(
-        f"\"python -c \\\"from spectra_utils import check_realizability;print('REALIZABLE' if check_realizability('/data/{temp_spec_path}', 60) else 'UNREALIZABLE')\\\" \""
+        f"\"python -c \\\"from spectra_utils import check_realizability;print('REALIZABLE' if check_realizability('/data/{temp_spec_path}', {SPECTRA_REALIZABILITY_CHECK_TIMEOUT}) else 'UNREALIZABLE')\\\" \""
     )
 
     if result.returncode != 0:

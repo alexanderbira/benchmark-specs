@@ -53,157 +53,150 @@ def pipeline_entry(spec_file_path, verbose=False) -> (List[Results], Optional[Re
         print(f"Loaded specification: {spec.get('name', 'Unknown')}")
 
     # List of (realizability_checker, unrealizable_core_computer, name) tuples
-    realizability_checker_core_computer_tool_names = [
+    realizability_tools = [
         (is_strix_realizable, compute_strix_unrealizable_cores, "strix"),  # Always include Strix-based checker
     ]
 
-    spectra_compatible = is_spectra_compatible(spec)
-
     # Check if the spec is valid in Spectra
+    spectra_compatible = is_spectra_compatible(spec)
     if spectra_compatible:
         # If compatible, add Spectra-based checkers
         print("Specification is compatible with Spectra.")
-        realizability_checker_core_computer_tool_names.append(
+        realizability_tools.append(
             (is_spectra_realizable, compute_spectra_unrealizable_cores, "spectra")
         )
     else:
         print("Specification is NOT compatible with Spectra.")
 
-    all_pattern_results = []
-
-    for realizability_checker, unrealizable_core_computer, name in realizability_checker_core_computer_tool_names:
-        if verbose:
-            print(f"\n== Using {name}-based realizability checker and unrealizable core computer ==\n")
-
-        # Check realizability of the specification
-        if is_strix_realizable(spec):
-            print(f"Specification is realizable according to {name}, skipping pattern BC search with this tool.")
-            continue
-
-        if verbose:
-            print(f"Specification is not realizable according to {name}, proceeding with BC search.")
-
-        # Stage 1 - find BCs using known patterns
-        if verbose:
-            print("\n**Searching for BCs using known BC patterns**\n")
-        pattern_results = find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, name, verbose)
-        all_pattern_results.extend(pattern_results)
+    # Stage 1 - find BCs using known patterns
+    pattern_results = find_pattern_bcs(spec, realizability_tools, verbose)
 
     # Stage 2 - find BCs using interpolation
-    if spectra_compatible:
+    if spectra_compatible and False:
         if verbose:
             print("\n**Searching for BCs using interpolation**\n")
         interpolation_results = find_interpolation_bcs(spec, verbose)
-        return all_pattern_results, interpolation_results
+        return pattern_results, interpolation_results
 
-    return all_pattern_results, None
+    return pattern_results, None
 
 
-def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, tool: str, verbose=True) -> List[Results]:
+def find_pattern_bcs(spec, realizability_tools, verbose=True) -> List[Results]:
     """Find BCs in the spec using known patterns.
 
     Args:
         spec: The JSON specification dictionary
-        realizability_checker: Function to check realizability of a spec
-        unrealizable_core_computer: Function to compute unrealizable cores of a spec
-        tool: Name of the tool used for realizability checking (for reporting)
+        realizability_tools: A tuple of (realizability_checker, unrealizable_core_computer, name)
         verbose: Whether to print detailed output
+
     Returns:
         Results objects containing found BCs
     """
 
     all_results = []
 
-    if verbose:
-        print("Computing unrealizable cores...\n")
-
-    # Compute unrealizable cores
-    all_unrealizable_cores = unrealizable_core_computer(spec)
-
-    # pattern_cores will hold tuples of (bc_pattern, unrealizable_cores, goal_patterns)
-    # each pattern will be checked against the full unrealizable cores
-    # if goal patterns are specified and the subset of goals matching them is unrealizable,
-    # the pattern will also be checked against the unrealizable cores of that subset
-    pattern_cores: List[tuple[str, List[List[str]], Optional[List[str]]]] = []
-    for bc_pattern, goal_patterns in patterns:
-        pattern_cores.append((bc_pattern, all_unrealizable_cores, None))
-
-        if goal_patterns is not None:
-            # Filter the goals to only those matching the goal patterns
-            matching_goals = []
-            for goal in spec.get('goals', []):
-                for goal_pattern in goal_patterns:
-                    if match_pattern(goal, goal_pattern, nnf=False) or match_pattern(goal, goal_pattern, nnf=True):
-                        matching_goals.append(goal)
-                        break
-
-            # Check if this subset of goals is still unrealizable
-            if matching_goals:
-                spec_copy = spec.copy()
-                spec_copy['goals'] = matching_goals
-                if not realizability_checker(spec_copy):
-                    # Compute unrealizable cores for the filtered goals
-                    if verbose:
-                        print(f"Pattern {bc_pattern} matches goals {matching_goals}, which are unrealizable, "
-                              f"computing their unrealizable cores...")
-                    filtered_cores = unrealizable_core_computer(spec_copy)
-                    pattern_cores.append((bc_pattern, filtered_cores, goal_patterns))
-                else:
-                    if verbose:
-                        print(f"Pattern {bc_pattern} matches goals {matching_goals}, which are realizable, "
-                              f"skipping...")
-            else:
-                if verbose:
-                    print(f"Pattern {bc_pattern} does not match any goals, skipping...")
-
-    for bc_pattern, unrealizable_cores, goal_patterns in pattern_cores:
-        if verbose:
-            print(f"Checking pattern: {bc_pattern}")
-
-        results = Results(spec, bc_pattern, unrealizable_cores, tool, goal_patterns)
-
-        # Generate BC candidates from the pattern
-        bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), MAX_PATTERN_CONJUNCTS)
-
-        # Add start time for timeout checking
-        start_time = time.time()
-
-        i = 1
-        for bc_candidate in bc_candidates:
-            # Check if timeout is exceeded
-            if time.time() - start_time > PATTERN_TIMEOUT != -1:
-                if verbose:
-                    print(f"Timeout exceeded ({PATTERN_TIMEOUT}s) for pattern {bc_pattern}, moving to next pattern...")
-                break
-            if i > PATTERN_MAX_CANDIDATES != -1:
-                if verbose:
-                    print(f"Reached maximum number of candidates ({PATTERN_MAX_CANDIDATES}) for pattern {bc_pattern}, "
-                          f"moving to next pattern...")
-                break
-
-            i += 1
-
-            for core in unrealizable_cores:
-
-                # Check if the current candidate is a (U)BC for the current unrealizable core
-                candidate_is_bc = is_bc(spec.get('domains', []), core, bc_candidate)
-
-                if candidate_is_bc:
-                    # Check if the candidate is unavoidable
+    for realizability_checker, unrealizable_core_computer, tool_name in realizability_tools:
+        for use_assumptions in [True, False]:
+            for bc_pattern, goal_patterns in patterns:
+                for apply_goal_filter in ([False] if goal_patterns is None else [False, True]):
+                    # Create a copy of the spec to modify
                     spec_copy = spec.copy()
-                    spec_copy['goals'] = [f"! ({bc_candidate})"]
-                    try:
-                        is_unavoidable = not realizability_checker(spec_copy)
-                    except RuntimeError:
-                        is_unavoidable = None
-                    results.add_bc(bc_candidate, core, is_unavoidable)
 
-        if verbose:
-            print(f"Found {len(results.bcs)} BC candidates for pattern {bc_pattern}, filtering out implied BCs...")
-        results.filter_bcs()
-        all_results.append(results)
+                    # If not using assumptions, move them to guarantees
+                    if not use_assumptions:
+                        assumptions = spec_copy.get('assumptions', [])
+                        guarantees = spec_copy.get('guarantees', [])
+                        spec_copy['guarantees'] = guarantees + assumptions
+                        spec_copy['assumptions'] = []
+
+                    # If applying goal filter, filter the goals
+                    if apply_goal_filter:  # goal_patterns is also not None in this case
+                        filtered_goals = []
+                        for goal in spec.get('goals', []):
+                            for goal_pattern in goal_patterns:
+                                if match_pattern(goal, goal_pattern, nnf=False) or match_pattern(goal, goal_pattern,
+                                                                                                 nnf=True):
+                                    filtered_goals.append(goal)
+                                    break
+                        spec_copy['goals'] = filtered_goals
+
+                    # Check if the modified spec is realizable
+                    if realizability_checker(spec_copy):
+                        continue
+
+                    # Initialize results
+                    results = Results(spec, bc_pattern, None, tool_name,
+                                      goal_patterns if apply_goal_filter else None, use_assumptions)
+                    run_pattern(spec_copy, results, bc_pattern, realizability_checker, unrealizable_core_computer,
+                                verbose)
+                    all_results.append(results)
 
     return all_results
+
+
+def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrealizable_core_computer, verbose):
+    """Run the BC search for a given pattern on the spec, updating results.
+
+    Args:
+        spec: The JSON specification dictionary
+        results: The Results object to update
+        bc_pattern: The BC pattern string
+        realizability_checker: Function to check realizability (spec -> bool)
+        unrealizable_core_computer: Function to compute unrealizable cores (spec -> List[List[str]])
+        verbose: Whether to print detailed output
+
+    Returns:
+        None (results are updated in place)
+    """
+    # Compute unrealizable cores
+    if verbose:
+        print("Computing unrealizable cores...\n")
+    unrealizable_cores = unrealizable_core_computer(spec)  # TODO: memoize these calls
+
+    results.unrealizable_cores = unrealizable_cores
+
+    # Generate BC candidates from the pattern
+    bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), MAX_PATTERN_CONJUNCTS)
+
+    # Variables to track time and candidate count for timeout/limit enforcement
+    start_time = time.time()
+    i = 1
+
+    for bc_candidate in bc_candidates:
+        # Check if timeout/limits are exceeded
+        if time.time() - start_time > PATTERN_TIMEOUT != -1:
+            if verbose:
+                print(f"Timeout exceeded ({PATTERN_TIMEOUT}s) for pattern {bc_pattern}, moving to next pattern...")
+            break
+        if i > PATTERN_MAX_CANDIDATES != -1:
+            if verbose:
+                print(f"Reached maximum number of candidates ({PATTERN_MAX_CANDIDATES}) for pattern {bc_pattern}, "
+                      f"moving to next pattern...")
+            break
+
+        i += 1
+
+        for core in unrealizable_cores:
+
+            # Check if the current candidate is a BC for the current unrealizable core
+            candidate_is_bc = is_bc(spec.get('domains', []), core, bc_candidate)
+
+            if candidate_is_bc:
+                # Check if the candidate is unavoidable
+                spec_copy = spec.copy()
+                spec_copy['goals'] = [f"! ({bc_candidate})"]
+
+                try:
+                    is_unavoidable = not realizability_checker(spec_copy)
+                except RuntimeError:
+                    is_unavoidable = None
+
+                results.add_bc(bc_candidate, core, is_unavoidable)
+
+    # Filter out implied BCs
+    results.filter_bcs()
+
+    return results
 
 
 def find_interpolation_bcs(spec, verbose=False):
@@ -308,17 +301,6 @@ if __name__ == "__main__":
 
     print("\n\n=== Pipeline Results ===\n")
 
-    # Create and display table from pattern results
-    if all_pattern_results:
-        print("**Pattern-based BC search results summary table:**\n")
-
-        # Create DataFrame from summarise() results
-        columns = ["BC Pattern", "Realizability Tool", "Goal Filters",
-                   "Unrealizable Cores", "Total BCs", "UBCs", "Maybe UBCs"]
-        df = pd.DataFrame([result.summarise() for result in all_pattern_results], columns=columns)
-        print(df.to_string(index=False))
-        print()
-
     print("**Pattern-based BC search results:**\n")
     for pattern_results in all_pattern_results:
         pattern_results.display()
@@ -326,3 +308,13 @@ if __name__ == "__main__":
     if interpolation_results is not None:
         print("\n**Interpolation-based BC search results:**\n")
         interpolation_results.display()
+
+    # Create and display table from pattern results
+    if all_pattern_results:
+        print("**Pattern-based BC search results summary table:**\n")
+
+        # Create DataFrame from summarise() results
+        columns = ["BC Pattern", "Realizability Tool", "Goal Filters", "Use Assumptions",
+                   "Unrealizable Cores", "Total BCs", "UBCs", "Maybe UBCs"]
+        df = pd.DataFrame([result.summarise() for result in all_pattern_results], columns=columns)
+        print(df.to_string(index=False))

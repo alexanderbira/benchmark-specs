@@ -27,7 +27,8 @@ class Results:
     def __init__(self, spec: dict, bc_pattern: Optional[str] = None,
                  unrealizable_cores: Optional[List[List[str]]] = None,
                  realizability_tool: Optional[str] = None,
-                 goal_filters: Optional[List[str]] = None):
+                 goal_filters: Optional[List[str]] = None,
+                 use_assumptions: Optional[bool] = None):
         """
         Initialize an empty results container.
 
@@ -37,12 +38,14 @@ class Results:
             unrealizable_cores: List of unrealizable cores, if any
             realizability_tool: The realizability tool used, if any
             goal_filters: List of goal filters applied, if any
+            use_assumptions: Whether assumptions were treated as assumptions (True) or guarantees (False)
         """
         self.spec = spec
         self.bc_pattern = bc_pattern
         self.unrealizable_cores = unrealizable_cores
         self.realizability_tool = realizability_tool
         self.goal_filters = goal_filters
+        self.use_assumptions = use_assumptions
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
 
     def add_bc(self, bc_formula: str, goals: List[str], unavoidable: Optional[bool]):
@@ -105,6 +108,7 @@ class Results:
         print(f"BC pattern: {self.bc_pattern if self.bc_pattern else 'None'}")
         print(f"Realizability tool: {self.realizability_tool if self.realizability_tool else 'None'}")
         print(f"Goal filters: {self.goal_filters if self.goal_filters else 'None'}")
+        print(f"Use assumptions: {self.use_assumptions if self.use_assumptions is not None else 'None'}")
         print(f"Number of unrealizable cores: {len(self.unrealizable_cores) if self.unrealizable_cores else 0}")
         print(f"Number of BCs: {len(self.bcs)}")
         print(f"Number of UBCs: {sum(1 for bc in self.bcs if bc.unavoidable is True)}")
@@ -135,6 +139,7 @@ class Results:
             self.bc_pattern if self.bc_pattern else 'None',
             self.realizability_tool if self.realizability_tool else 'None',
             self.goal_filters if self.goal_filters else 'None',
+            self.use_assumptions if self.use_assumptions is not None else 'None',
             len(self.unrealizable_cores) if self.unrealizable_cores else 0,
             len(self.bcs),
             sum(1 for bc in self.bcs if bc.unavoidable is True),

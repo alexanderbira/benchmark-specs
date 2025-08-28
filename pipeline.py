@@ -151,7 +151,7 @@ def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrea
     # Compute unrealizable cores
     if verbose:
         print("Computing unrealizable cores...\n")
-    unrealizable_cores = unrealizable_core_computer(spec)  # TODO: memoize these calls
+    unrealizable_cores = unrealizable_core_computer(spec)
 
     results.unrealizable_cores = unrealizable_cores
 

@@ -1,12 +1,35 @@
 # Different implementations of unrealizable-core-finding functions
 
 import copy
+import hashlib
+import json
 import os
 from typing import List, Set
 
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.spectra_conversion.to_spectra import json_to_spectra
 from lib.util.check_realizability import is_strix_realizable
+
+# Cache for unrealizable cores computation
+_unrealizable_cores_cache = {}
+
+
+def _get_spec_cache_key(spec: dict, relevant_keys: List[str]) -> str:
+    """
+    Generate a cache key based on relevant parts of the spec.
+
+    Args:
+        spec: The specification dictionary
+        relevant_keys: List of keys from spec to include in the hash
+
+    Returns:
+        A hash string that can be used as a cache key
+    """
+    # Extract only the relevant parts of the spec for hashing
+    relevant_spec = {key: spec.get(key) for key in relevant_keys if key in spec}
+    # Sort keys to ensure consistent hashing
+    spec_str = json.dumps(relevant_spec, sort_keys=True)
+    return hashlib.sha256(spec_str.encode()).hexdigest()
 
 
 def compute_strix_unrealizable_cores(spec: dict) -> List[List[str]]:
@@ -19,11 +42,19 @@ def compute_strix_unrealizable_cores(spec: dict) -> List[List[str]]:
     Returns:
         List of unrealizable cores, where each core is a list of goal formulas
     """
+    # Generate cache key based on relevant spec parts for Strix
+    cache_key = "strix_" + _get_spec_cache_key(spec, ["goals", "ins", "outs", "assumptions", "domains"])
+
+    # Check cache first
+    if cache_key in _unrealizable_cores_cache:
+        return _unrealizable_cores_cache[cache_key]
 
     # Extract goals from the spec
     goals = spec.get("goals", [])
     if not goals:
-        return []
+        result = []
+        _unrealizable_cores_cache[cache_key] = result
+        return result
 
     def is_goal_subset_unrealizable(goal_subset: Set[str]) -> bool:
         """
@@ -46,6 +77,9 @@ def compute_strix_unrealizable_cores(spec: dict) -> List[List[str]]:
 
     # Find all minimal unrealizable cores
     unrealizable_cores = find_cores(goals, is_goal_subset_unrealizable)
+
+    # Cache the result
+    _unrealizable_cores_cache[cache_key] = unrealizable_cores
     return unrealizable_cores
 
 
@@ -110,6 +144,12 @@ def compute_spectra_unrealizable_cores(spec: dict) -> List[List[str]]:
     Returns:
         List of unrealizable cores, where each core is a list of goal formulas
     """
+    # Generate cache key based on all spec parts (since Spectra conversion uses the whole spec)
+    cache_key = "spectra_" + _get_spec_cache_key(spec, ["goals", "ins", "outs", "assumptions", "domains", "name"])
+
+    # Check cache first
+    if cache_key in _unrealizable_cores_cache:
+        return _unrealizable_cores_cache[cache_key]
 
     # Convert to spectra format
     spectra_spec = json_to_spectra(spec)
@@ -163,4 +203,6 @@ def compute_spectra_unrealizable_cores(spec: dict) -> List[List[str]]:
         core_goals = [spec["goals"][i] for i in core_indices if i < len(spec["goals"])]
         unrealizable_cores.append(core_goals)
 
+    # Cache the result
+    _unrealizable_cores_cache[cache_key] = unrealizable_cores
     return unrealizable_cores

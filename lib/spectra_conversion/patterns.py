@@ -63,7 +63,7 @@ def formula_to_string(formula):
 # Returns the matched formula or None if no match is found
 # E.g. match_pattern("G ((G x) -> F(y || x))", "G (P -> F Q)") -> {"P": "G x", "Q": "y || x"}
 # Note: only syntactic structure is matched, not semantic equivalence
-def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string, nnf: bool = False):
+def match_pattern(formula: str, pattern_formula: str, stringifier=formula_to_string, nnf: bool = False) -> dict | None:
     """
     Match a formula against a pattern formula.
 

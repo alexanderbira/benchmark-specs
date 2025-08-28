@@ -4,7 +4,7 @@ import argparse
 import re
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.bc.generate_pattern_candidates import generate_pattern_candidates
@@ -12,6 +12,7 @@ from lib.bc.interpolation_tree import build_interpolation_tree
 from lib.bc.is_bc import is_bc
 from lib.bc.results import Results
 from lib.spectra_conversion.is_spectra_compatible import is_spectra_compatible
+from lib.spectra_conversion.patterns import match_pattern
 from lib.spectra_conversion.to_spectra import json_to_spectra
 from lib.util.check_realizability import is_spectra_realizable, is_strix_realizable
 from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_strix_unrealizable_cores
@@ -24,11 +25,12 @@ MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC p
 INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
 INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
 
+# List of (pattern, target goal shape)
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
-patterns = [
-    "F(c1)",  # Achieve-Avoid
-    "F(c1 & ((!c2) U G(!c1)))",  # Retraction
-    "(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)",
+patterns: List[tuple[str, Optional[List[str]]]] = [
+    ("F(c1)", ["G(p -> (X q))"]),  # Achieve-Avoid
+    ("F(c1 & ((!c2) U G(!c1)))", None),  # Retraction
+    ("(F(c1 & c2 & !c3)) U (c1 & !c2 & !c3)", None),
 ]
 
 
@@ -53,9 +55,10 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
         (is_strix_realizable, compute_strix_unrealizable_cores, "strix"),  # Always include Strix-based checker
     ]
 
+    spectra_compatible = is_spectra_compatible(spec)
 
     # Check if the spec is valid in Spectra
-    if is_spectra_compatible(spec):
+    if spectra_compatible:
         # If compatible, add Spectra-based checkers
         print("Specification is compatible with Spectra.")
         realizability_checker_core_computer_tool_names.append(
@@ -83,11 +86,13 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
         pattern_results.display()
 
     # Stage 2 - find BCs using interpolation
-    if verbose:
-        print("\n**Searching for BCs using interpolation**\n")
-    interpolation_results = find_interpolation_bcs(spec, verbose)
+    if spectra_compatible:
+        if verbose:
+            print("\n**Searching for BCs using interpolation**\n")
+        interpolation_results = find_interpolation_bcs(spec, verbose)
+        interpolation_results.display()
 
-    return None, interpolation_results
+    return None, None  # TODO: actually return results
 
 
 def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, verbose=True):
@@ -105,19 +110,42 @@ def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, ve
     results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: pattern-based BCs")
 
     if verbose:
-        print("Computing unrealizable cores...")
+        print("Computing unrealizable cores...\n")
 
     # Compute unrealizable cores
-    unrealizable_cores = unrealizable_core_computer(spec)
-    if verbose:
-        print(f"Found {len(unrealizable_cores)} unrealizable cores:")
+    all_unrealizable_cores = unrealizable_core_computer(spec)
 
-        for i, core in enumerate(unrealizable_cores, 1):
-            print(f"Core {i}: {core}")
+    # pattern_cores will hold tuples of (bc_pattern, unrealizable_cores)
+    # each pattern will be checked against the full unrealizable cores
+    # if goal patterns are specified and the subset of goals matching them is unrealizable,
+    # the pattern will also be checked against the unrealizable cores of that subset
 
-        print("")
+    pattern_cores = []
+    for bc_pattern, goal_patterns in patterns:
+        pattern_cores.append((bc_pattern, all_unrealizable_cores))
 
-    for bc_pattern in patterns:
+        if goal_patterns is not None:
+            # Filter the goals to only those matching the goal patterns
+            matching_goals = []
+            for goal in spec.get('goals', []):
+                for goal_pattern in goal_patterns:
+                    if match_pattern(goal, goal_pattern, nnf=False) or match_pattern(goal, goal_pattern, nnf=True):
+                        matching_goals.append(goal)
+                        break
+
+            # Check if this subset of goals is still unrealizable
+            if matching_goals:
+                spec_copy = spec.copy()
+                spec_copy['goals'] = matching_goals
+                if not realizability_checker(spec_copy):
+                    # Compute unrealizable cores for the filtered goals
+                    if verbose:
+                        print(f"Pattern {bc_pattern} matches goals {matching_goals}, which are unrealizable, "
+                              f"computing their unrealizable cores...")
+                    filtered_cores = unrealizable_core_computer(spec_copy)
+                    pattern_cores.append((bc_pattern, filtered_cores))
+
+    for bc_pattern, unrealizable_cores in pattern_cores:
         if verbose:
             print(f"Checking pattern: {bc_pattern}")
 

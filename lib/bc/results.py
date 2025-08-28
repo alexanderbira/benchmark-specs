@@ -24,16 +24,25 @@ class Results:
             self.goals = goals
             self.unavoidable = unavoidable
 
-    def __init__(self, spec: dict, name: str):
+    def __init__(self, spec: dict, bc_pattern: Optional[str] = None,
+                 unrealizable_cores: Optional[List[List[str]]] = None,
+                 realizability_tool: Optional[str] = None,
+                 goal_filters: Optional[List[str]] = None):
         """
         Initialize an empty results container.
 
         Args:
             spec: The JSON specification dictionary
-            name: Name of the results set (for display purposes)
+            bc_pattern: The BC pattern used, if any
+            unrealizable_cores: List of unrealizable cores, if any
+            realizability_tool: The realizability tool used, if any
+            goal_filters: List of goal filters applied, if any
         """
         self.spec = spec
-        self.name = name
+        self.bc_pattern = bc_pattern
+        self.unrealizable_cores = unrealizable_cores
+        self.realizability_tool = realizability_tool
+        self.goal_filters = goal_filters
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
 
     def add_bc(self, bc_formula: str, goals: List[str], unavoidable: Optional[bool]):
@@ -90,26 +99,47 @@ class Results:
 
     def display(self):
         """Display the results in a readable format."""
-        print(f"\n+++ Results for {self.name} +++\n")
-        print(f"Total Boundary Conditions found: {len(self.bcs)}")
-        print(f"  Of which, {sum(1 for bc in self.bcs if bc.unavoidable)} are unavoidable")
+        # Print summary information
+        print(f"\n+++ Results Summary +++\n")
+        print(f"Spec name: {self.spec.get('name', 'Unknown')}")
+        print(f"BC pattern: {self.bc_pattern if self.bc_pattern else 'None'}")
+        print(f"Realizability tool: {self.realizability_tool if self.realizability_tool else 'None'}")
+        print(f"Goal filters: {self.goal_filters if self.goal_filters else 'None'}")
+        print(f"Number of unrealizable cores: {len(self.unrealizable_cores) if self.unrealizable_cores else 0}")
+        print(f"Number of BCs: {len(self.bcs)}")
+        print(f"Number of UBCs: {sum(1 for bc in self.bcs if bc.unavoidable is True)}")
+        print(f"Number of maybe UBCs: {sum(1 for bc in self.bcs if bc.unavoidable is None)}")
 
         if not self.bcs:
             return
 
-        # Group BCs by formula
-        formula_groups = defaultdict(list)
+        # Group BCs by goals
+        goal_groups = defaultdict(list)
         for bc in self.bcs:
-            formula_groups[bc.formula].append(bc)
+            goal_key = tuple(sorted(bc.goals))
+            goal_groups[goal_key].append(bc)
 
-        print("\nBoundary Conditions grouped by formula:\n")
-        for i, (formula, bcs) in enumerate(formula_groups.items(), 1):
-            print(f"Formula {i}: {formula}")
-            print(f"  Goal sets:")
+        print("\nBoundary Conditions grouped by goals:\n")
+        for i, (goal_tuple, bcs) in enumerate(goal_groups.items(), 1):
+            goals_list = list(goal_tuple)
+            print(f"Goal set {i}: {goals_list}")
+            print(f"  Formulas:")
             for bc in bcs:
                 unavoidable_str = "(maybe UBC)" if bc.unavoidable is None else "(UBC)" if bc.unavoidable else "(BC)"
-                print(f"    {bc.goals} {unavoidable_str}")
-            print()  # Empty line between formulas
+                print(f"    {bc.formula} {unavoidable_str}")
+            print()  # Empty line between goal sets
+
+    def summarise(self):
+        """Return a list of summary values for table creation."""
+        return [
+            self.bc_pattern if self.bc_pattern else 'None',
+            self.realizability_tool if self.realizability_tool else 'None',
+            self.goal_filters if self.goal_filters else 'None',
+            len(self.unrealizable_cores) if self.unrealizable_cores else 0,
+            len(self.bcs),
+            sum(1 for bc in self.bcs if bc.unavoidable is True),
+            sum(1 for bc in self.bcs if bc.unavoidable is None)
+        ]
 
 
 def spot_implies(formula_a: str, formula_b: str) -> bool:

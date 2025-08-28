@@ -145,7 +145,7 @@ class InterpolationTree:
             Results object containing found BCs
         """
 
-        results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: interpolation-based BCs")
+        results = Results(spec)
 
         if not self.root:
             if verbose:

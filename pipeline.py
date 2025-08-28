@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+import pandas as pd
+
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.bc.generate_pattern_candidates import generate_pattern_candidates
 from lib.bc.interpolation_tree import build_interpolation_tree
@@ -34,7 +36,7 @@ patterns: List[tuple[str, Optional[List[str]]]] = [
 ]
 
 
-def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optional[Results]):
+def pipeline_entry(spec_file_path, verbose=False) -> (List[Results], Optional[Results]):
     """Run the pipeline on a spec file and return results.
 
     Args:
@@ -67,6 +69,8 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
     else:
         print("Specification is NOT compatible with Spectra.")
 
+    all_pattern_results = []
+
     for realizability_checker, unrealizable_core_computer, name in realizability_checker_core_computer_tool_names:
         if verbose:
             print(f"\n== Using {name}-based realizability checker and unrealizable core computer ==\n")
@@ -82,32 +86,33 @@ def pipeline_entry(spec_file_path, verbose=False) -> (Optional[Results], Optiona
         # Stage 1 - find BCs using known patterns
         if verbose:
             print("\n**Searching for BCs using known BC patterns**\n")
-        pattern_results = find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, verbose)
-        pattern_results.display()
+        pattern_results = find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, name, verbose)
+        all_pattern_results.extend(pattern_results)
 
     # Stage 2 - find BCs using interpolation
     if spectra_compatible:
         if verbose:
             print("\n**Searching for BCs using interpolation**\n")
         interpolation_results = find_interpolation_bcs(spec, verbose)
-        interpolation_results.display()
+        return all_pattern_results, interpolation_results
 
-    return None, None  # TODO: actually return results
+    return all_pattern_results, None
 
 
-def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, verbose=True):
+def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, tool: str, verbose=True) -> List[Results]:
     """Find BCs in the spec using known patterns.
 
     Args:
         spec: The JSON specification dictionary
         realizability_checker: Function to check realizability of a spec
         unrealizable_core_computer: Function to compute unrealizable cores of a spec
+        tool: Name of the tool used for realizability checking (for reporting)
         verbose: Whether to print detailed output
     Returns:
-        Results object containing found BCs
+        Results objects containing found BCs
     """
 
-    results = Results(spec, f"{spec.get('name', 'unnamed_spec')}: pattern-based BCs")
+    all_results = []
 
     if verbose:
         print("Computing unrealizable cores...\n")
@@ -115,14 +120,13 @@ def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, ve
     # Compute unrealizable cores
     all_unrealizable_cores = unrealizable_core_computer(spec)
 
-    # pattern_cores will hold tuples of (bc_pattern, unrealizable_cores)
+    # pattern_cores will hold tuples of (bc_pattern, unrealizable_cores, goal_patterns)
     # each pattern will be checked against the full unrealizable cores
     # if goal patterns are specified and the subset of goals matching them is unrealizable,
     # the pattern will also be checked against the unrealizable cores of that subset
-
-    pattern_cores = []
+    pattern_cores: List[tuple[str, List[List[str]], Optional[List[str]]]] = []
     for bc_pattern, goal_patterns in patterns:
-        pattern_cores.append((bc_pattern, all_unrealizable_cores))
+        pattern_cores.append((bc_pattern, all_unrealizable_cores, None))
 
         if goal_patterns is not None:
             # Filter the goals to only those matching the goal patterns
@@ -143,11 +147,20 @@ def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, ve
                         print(f"Pattern {bc_pattern} matches goals {matching_goals}, which are unrealizable, "
                               f"computing their unrealizable cores...")
                     filtered_cores = unrealizable_core_computer(spec_copy)
-                    pattern_cores.append((bc_pattern, filtered_cores))
+                    pattern_cores.append((bc_pattern, filtered_cores, goal_patterns))
+                else:
+                    if verbose:
+                        print(f"Pattern {bc_pattern} matches goals {matching_goals}, which are realizable, "
+                              f"skipping...")
+            else:
+                if verbose:
+                    print(f"Pattern {bc_pattern} does not match any goals, skipping...")
 
-    for bc_pattern, unrealizable_cores in pattern_cores:
+    for bc_pattern, unrealizable_cores, goal_patterns in pattern_cores:
         if verbose:
             print(f"Checking pattern: {bc_pattern}")
+
+        results = Results(spec, bc_pattern, unrealizable_cores, tool, goal_patterns)
 
         # Generate BC candidates from the pattern
         bc_candidates = generate_pattern_candidates(bc_pattern, spec.get('ins'), MAX_PATTERN_CONJUNCTS)
@@ -183,14 +196,14 @@ def find_pattern_bcs(spec, realizability_checker, unrealizable_core_computer, ve
                         is_unavoidable = not realizability_checker(spec_copy)
                     except RuntimeError:
                         is_unavoidable = None
-                    results.add_bc(bc_candidate, core, is_unavoidable)  # Add to results
+                    results.add_bc(bc_candidate, core, is_unavoidable)
 
-    # Filter out implied BCs
-    if verbose:
-        print("\nFiltering out implied boundary conditions...")
-    results.filter_bcs()
+        if verbose:
+            print(f"Found {len(results.bcs)} BC candidates for pattern {bc_pattern}, filtering out implied BCs...")
+        results.filter_bcs()
+        all_results.append(results)
 
-    return results
+    return all_results
 
 
 def find_interpolation_bcs(spec, verbose=False):
@@ -291,10 +304,25 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Call the pipeline entry point
-    pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.verbose)
+    all_pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.verbose)
 
-    if pattern_results is not None:
+    print("\n\n=== Pipeline Results ===\n")
+
+    # Create and display table from pattern results
+    if all_pattern_results:
+        print("**Pattern-based BC search results summary table:**\n")
+
+        # Create DataFrame from summarise() results
+        columns = ["BC Pattern", "Realizability Tool", "Goal Filters",
+                   "Unrealizable Cores", "Total BCs", "UBCs", "Maybe UBCs"]
+        df = pd.DataFrame([result.summarise() for result in all_pattern_results], columns=columns)
+        print(df.to_string(index=False))
+        print()
+
+    print("**Pattern-based BC search results:**\n")
+    for pattern_results in all_pattern_results:
         pattern_results.display()
 
     if interpolation_results is not None:
+        print("\n**Interpolation-based BC search results:**\n")
         interpolation_results.display()

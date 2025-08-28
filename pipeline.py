@@ -96,6 +96,8 @@ def find_pattern_bcs(spec, realizability_tools, verbose=True) -> List[Results]:
     all_results = []
 
     for realizability_checker, unrealizable_core_computer, tool_name in realizability_tools:
+        if verbose:
+            print(f"\n**Searching for BCs using patterns with {tool_name}**")
         for use_assumptions in [True, False]:
             for bc_pattern, goal_patterns in patterns:
                 for apply_goal_filter in ([False] if goal_patterns is None else [False, True]):
@@ -127,6 +129,12 @@ def find_pattern_bcs(spec, realizability_tools, verbose=True) -> List[Results]:
                     # Initialize results
                     results = Results(spec, bc_pattern, None, tool_name,
                                       goal_patterns if apply_goal_filter else None, use_assumptions)
+
+                    if verbose:
+                        print(f"\nRunning BC search with pattern '{bc_pattern}', "
+                              f"*{'with' if apply_goal_filter else 'without'}* goal filter, "
+                              f"{'*using*' if use_assumptions else '*not* using'} assumptions...")
+
                     run_pattern(spec_copy, results, bc_pattern, realizability_checker, unrealizable_core_computer,
                                 verbose)
                     all_results.append(results)
@@ -150,7 +158,7 @@ def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrea
     """
     # Compute unrealizable cores
     if verbose:
-        print("Computing unrealizable cores...\n")
+        print("Computing unrealizable cores...")
     unrealizable_cores = unrealizable_core_computer(spec)
 
     results.unrealizable_cores = unrealizable_cores
@@ -161,6 +169,9 @@ def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrea
     # Variables to track time and candidate count for timeout/limit enforcement
     start_time = time.time()
     i = 1
+
+    if verbose:
+        print("Testing BC candidates...")
 
     for bc_candidate in bc_candidates:
         # Check if timeout/limits are exceeded
@@ -194,6 +205,8 @@ def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrea
                 results.add_bc(bc_candidate, core, is_unavoidable)
 
     # Filter out implied BCs
+    if verbose:
+        print("Filtering out implied boundary conditions...")
     results.filter_bcs()
 
     return results

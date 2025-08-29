@@ -36,11 +36,12 @@ patterns: List[tuple[str, Optional[List[str]]]] = [
 ]
 
 
-def pipeline_entry(spec_file_path, verbose=False) -> (List[Results], Optional[Results]):
+def pipeline_entry(spec_file_path, do_interpolation, verbose=False) -> (List[Results], Optional[Results]):
     """Run the pipeline on a spec file and return results.
 
     Args:
         spec_file_path: Path to the JSON specification file
+        do_interpolation: Whether to run the interpolation-based BC search
         verbose: Whether to print detailed output
 
     Returns:
@@ -71,13 +72,18 @@ def pipeline_entry(spec_file_path, verbose=False) -> (List[Results], Optional[Re
     # Stage 1 - find BCs using known patterns
     pattern_results = find_pattern_bcs(spec, realizability_tools, verbose)
 
+    if not do_interpolation:
+        return pattern_results, None
+
     # Stage 2 - find BCs using interpolation
-    if spectra_compatible and False:
+    if spectra_compatible:
         if verbose:
             print("\n**Searching for BCs using interpolation**\n")
         interpolation_results = find_interpolation_bcs(spec, verbose)
         return pattern_results, interpolation_results
-
+    else:
+        if verbose:
+            print("\nSkipping interpolation-based BC search since the spec is not compatible with Spectra.\n")
     return pattern_results, None
 
 
@@ -306,11 +312,12 @@ def find_interpolation_bcs(spec, verbose=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the BC tool pipeline on a specification file")
     parser.add_argument("spec_file", type=str, help="Path to the JSON specification file")
+    parser.add_argument("-i", "--interpolation", action="store_true", help="Enable interpolation-based BC search")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
     # Call the pipeline entry point
-    all_pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.verbose)
+    all_pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.interpolation, args.verbose)
 
     print("\n\n=== Pipeline Results ===\n")
 

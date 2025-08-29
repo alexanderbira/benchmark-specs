@@ -5,8 +5,8 @@ import re
 import spot
 from pylogics.parsers import parse_ltl
 from pylogics.syntax.base import And, Equivalence, Implies, Not, Or
-from pylogics.syntax.ltl import Always, Atomic, Eventually, Next, PropositionalFalse, PropositionalTrue, Release, Until, \
-    WeakNext, WeakUntil
+from pylogics.syntax.ltl import Always, Atomic, Eventually, FalseFormula, Next, PropositionalFalse, PropositionalTrue, \
+    Release, TrueFormula, Until, WeakNext, WeakUntil
 
 from lib.spectra_conversion.extracted_patterns import patterns
 
@@ -50,6 +50,10 @@ def formula_to_string(formula):
         return "false"
     elif isinstance(formula, WeakUntil):
         return f"({formula_to_string(formula.operands[0])}) W ({formula_to_string(formula.operands[1])})"
+    elif isinstance(formula, TrueFormula):
+        return "true"
+    elif isinstance(formula, FalseFormula):
+        return "false"
     else:
         print(f"Don't know how to convert {type(formula)} to string")
         if hasattr(formula, 'argument'):

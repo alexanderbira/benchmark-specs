@@ -3,6 +3,7 @@
 from collections import defaultdict
 from typing import List, Optional
 
+import pandas as pd
 import spot
 
 
@@ -47,6 +48,7 @@ class Results:
         self.goal_filters = goal_filters
         self.use_assumptions = use_assumptions
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
+        self.filtered_bcs: Optional[List[Results.BC]] = None  # List of filtered Boundary Conditions
 
     def add_bc(self, bc_formula: str, goals: List[str], unavoidable: Optional[bool]):
         """
@@ -60,8 +62,11 @@ class Results:
         bc = self.BC(bc_formula, goals, unavoidable)
         self.bcs.append(bc)
 
-    def filter_bcs(self):
-        """Filter out BCs which are stronger than (imply) other BCs with the same goals."""
+    def compute_filtered_bcs(self):
+        """Filter out BCs which are stronger than (imply) other BCs with the same goals.
+
+        Stores the filtered BCs in the filtered_bcs field.
+        """
         # Group BCs by goal set
         goal_groups = defaultdict(list)
         for bc in self.bcs:
@@ -90,7 +95,7 @@ class Results:
 
             final_bcs.extend(filtered_bcs)
 
-        self.bcs = final_bcs
+        self.filtered_bcs = final_bcs
 
     def display(self):
         """Display the results in a readable format."""
@@ -168,3 +173,81 @@ def spot_implies(formula_a: str, formula_b: str) -> bool:
         # This is a conservative approach that keeps both formulas
         print(f"Warning: Error checking implication {formula_a} -> {formula_b}: {e}")
         return False
+
+
+def process_pattern_results(results: List[Results]) -> pd.DataFrame:
+    """Analyse a list of Results objects and return a DataFrame with hierarchical structure.
+
+    Args:
+        results: List of Results objects to analyse
+
+    Returns:
+        A DataFrame containing the summary of the results with proper indexing
+    """
+    rows = []
+
+    # Group results by pattern first for better organization
+    pattern_groups = {}
+    for result in results:
+        pattern = result.bc_pattern if result.bc_pattern else 'None'
+        if pattern not in pattern_groups:
+            pattern_groups[pattern] = []
+        pattern_groups[pattern].append(result)
+
+    # Process each pattern group
+    for pattern in sorted(pattern_groups.keys()):
+        pattern_results = pattern_groups[pattern]
+
+        for result in pattern_results:
+            # Create rows for original BCs and filtered BCs
+            for filtered in [False, True]:
+                bcs_to_use = result.filtered_bcs if filtered and result.filtered_bcs is not None else result.bcs
+
+                # Sub-rows for each unrealizable core
+                if result.unrealizable_cores:
+                    for core in result.unrealizable_cores:
+                        # Find BCs that exactly match this core's goals
+                        matching_bcs = [bc for bc in bcs_to_use if sorted(bc.goals) == sorted(core)]
+
+                        # Count UBCs and maybe UBCs for this core
+                        num_ubcs = sum(1 for bc in matching_bcs if bc.unavoidable is True)
+                        num_maybe_ubcs = sum(1 for bc in matching_bcs if bc.unavoidable is None)
+
+                        row_data = {
+                            'bc_pattern': result.bc_pattern,
+                            'realizability_tool': result.realizability_tool,
+                            'goal_filters': str(result.goal_filters) if result.goal_filters else 'None',
+                            'use_assumptions': result.use_assumptions,
+                            'filtered': filtered,
+                            'unrealizable_core': str(core),
+                            # Core-specific columns
+                            'bcs': [bc.formula for bc in matching_bcs],
+                            'num_bcs': len(matching_bcs),
+                            'num_ubcs': num_ubcs,
+                            'num_maybe_ubcs': num_maybe_ubcs,
+                        }
+                        rows.append(row_data)
+                else:
+                    # No unrealizable cores - create a single row with empty core data
+                    row_data = {
+                        'bc_pattern': result.bc_pattern,
+                        'realizability_tool': result.realizability_tool,
+                        'goal_filters': str(result.goal_filters) if result.goal_filters else 'None',
+                        'use_assumptions': result.use_assumptions,
+                        'filtered': filtered,
+                        'unrealizable_core': 'None',
+                        # Core-specific columns (empty)
+                        'bcs': [],
+                        'num_bcs': 0,
+                        'num_ubcs': 0,
+                        'num_maybe_ubcs': 0,
+                    }
+                    rows.append(row_data)
+
+    df = pd.DataFrame(rows)
+
+    # Create MultiIndex with the requested hierarchy
+    index_cols = ['bc_pattern', 'realizability_tool', 'use_assumptions', 'goal_filters', 'filtered', 'unrealizable_core']
+    df = df.set_index(index_cols)
+
+    return df

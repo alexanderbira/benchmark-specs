@@ -1,12 +1,16 @@
 # Batch runner for the BC pipeline - runs pipeline on all spec files in a directory
-import sys
+import argparse
+import os
+import time
 
-from lib.util.spec_utils import find_spec_files
+from lib.bc.results import process_pattern_results
+from lib.util.spec_utils import find_spec_files, load_spec_file
+from parameters import INTERPOLATOR_REPAIR_LIMIT, INTERPOLATOR_TIMEOUT, MAX_PATTERN_CONJUNCTS, PATTERN_MAX_CANDIDATES, \
+    PATTERN_TIMEOUT, USE_DWYER_PATTERNS
 from pipeline import pipeline_entry
 
-VERBOSE = True
 
-def run_batch_pipeline(directory):
+def run_batch_pipeline(directory, verbose=False):
     """Run pipeline on all spec files in a directory and collect statistics.
 
     Args:
@@ -21,43 +25,49 @@ def run_batch_pipeline(directory):
     print(f"Found {len(spec_files)} spec files in {directory}")
     print("\n")
 
-    num_realizable = 0
-    num_pattern_success = 0
-    num_interpolation_success = 0
+    # Make a folder with the current timestamp to store results
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    results_dir = os.path.join("results", timestamp)
+    os.makedirs(results_dir, exist_ok=True)
+    print(f"Results will be saved to: {results_dir}\n")
+
+    # Save the run parameters to a file
+    with open(os.path.join(results_dir, "run_parameters.txt"), 'w') as f:
+        f.write(f"USE_DWYER_PATTERNS = {USE_DWYER_PATTERNS}\n")
+        f.write(f"PATTERN_TIMEOUT = {PATTERN_TIMEOUT}\n")
+        f.write(f"PATTERN_MAX_CANDIDATES = {PATTERN_MAX_CANDIDATES}\n")
+        f.write(f"MAX_PATTERN_CONJUNCTS = {MAX_PATTERN_CONJUNCTS}\n")
+        f.write(f"INTERPOLATOR_TIMEOUT = {INTERPOLATOR_TIMEOUT}\n")
+        f.write(f"INTERPOLATOR_REPAIR_LIMIT = {INTERPOLATOR_REPAIR_LIMIT}\n")
+        f.write(f"Directory = {directory}\n")
 
     for spec_file in spec_files:
-        print("+"*80)
+        print("+" * 80)
         print(f"\nRunning pipeline on: {spec_file}\n")
-        print("+"*80)
+        print("+" * 80)
 
         # Run the pipeline entry function
-        pattern_results, interpolation_results = pipeline_entry(spec_file, VERBOSE)
+        pattern_results, _ = pipeline_entry(spec_file, False, verbose)
+        if not pattern_results:
+            print(f"\n\nPipeline returned no results for {spec_file}")
+            continue
+        df = process_pattern_results(pattern_results)
 
-        if pattern_results is None and interpolation_results is None:
-            num_realizable += 1
-
-        if pattern_results is not None:
-            pattern_results.display()
-            num_pattern_success += 1
-        if interpolation_results is not None:
-            interpolation_results.display()
-            num_interpolation_success += 1
+        # Save results to files
+        spec_name = load_spec_file(spec_file).get('name')
+        excel_file = os.path.join(results_dir, f"{spec_name}_results.xlsx")
+        df.to_excel(excel_file, index=True)
 
         print("\n\n")
 
     print("Batch processing complete.")
 
-    print ("="*80)
-    print("\n\nSummary of results:\n")
-
-    print("Number of spec files processed:", len(spec_files))
-    print("  Realizable specs:", num_realizable)
-    print("  Specs where the pattern-based BC search was performed:", num_pattern_success)
-    print("  Specs where the interpolation-based BC search was performed:", num_interpolation_success)
-
-
 
 if __name__ == "__main__":
-    # Read directory from command line or use current directory
-    directory = "." if len(sys.argv) < 2 else sys.argv[1]
-    run_batch_pipeline(directory)
+    parser = argparse.ArgumentParser(description="Batch runner for the BC pipeline")
+    parser.add_argument("directory", type=str, help="Directory containing specification files")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+
+    args = parser.parse_args()
+
+    run_batch_pipeline(args.directory, args.verbose)

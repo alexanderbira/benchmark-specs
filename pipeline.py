@@ -6,26 +6,19 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-import pandas as pd
-
 from lib.adaptors.run_in_interpolation_repair import run_in_interpolation_repair
 from lib.bc.generate_pattern_candidates import generate_pattern_candidates
 from lib.bc.interpolation_tree import build_interpolation_tree
 from lib.bc.is_bc import is_bc
-from lib.bc.results import Results
+from lib.bc.results import Results, process_pattern_results
 from lib.spectra_conversion.is_spectra_compatible import is_spectra_compatible
 from lib.spectra_conversion.patterns import match_pattern
 from lib.spectra_conversion.to_spectra import json_to_spectra
 from lib.util.check_realizability import is_spectra_realizable, is_strix_realizable
 from lib.util.compute_unrealizable_cores import compute_spectra_unrealizable_cores, compute_strix_unrealizable_cores
 from lib.util.spec_utils import load_spec_file
-
-PATTERN_TIMEOUT = -1  # Timeout for pattern-based BC search in seconds per pattern (-1 for unlimited)
-PATTERN_MAX_CANDIDATES = 100  # The maximum number of BC candidates to generate per pattern (-1 for unlimited)
-MAX_PATTERN_CONJUNCTS = -1  # The maximum number of conjuncts to use in the BC pattern candidates (-1 for unlimited)
-
-INTERPOLATOR_TIMEOUT = 600  # Timeout for the interpolator in seconds
-INTERPOLATOR_REPAIR_LIMIT = 50  # Maximum number of realizable refinements to generate
+from parameters import INTERPOLATOR_REPAIR_LIMIT, INTERPOLATOR_TIMEOUT, MAX_PATTERN_CONJUNCTS, PATTERN_MAX_CANDIDATES, \
+    PATTERN_TIMEOUT
 
 # List of (pattern, target goal shape)
 # "c{n}" in the BC candidate formula will be replaced with conjunctions of input variables
@@ -128,18 +121,20 @@ def find_pattern_bcs(spec, realizability_tools, verbose=True) -> List[Results]:
                                     break
                         spec_copy['goals'] = filtered_goals
 
+                    if verbose:
+                        print(f"\nRunning BC search with pattern '{bc_pattern}', "
+                              f"*{'with' if apply_goal_filter else 'without'}* goal filter, "
+                              f"{'*using*' if use_assumptions else '*not* using'} assumptions...")
+
                     # Check if the modified spec is realizable
                     if realizability_checker(spec_copy):
+                        if verbose:
+                            print("Spec is realizable, skipping this search...")
                         continue
 
                     # Initialize results
                     results = Results(spec, bc_pattern, None, tool_name,
                                       goal_patterns if apply_goal_filter else None, use_assumptions)
-
-                    if verbose:
-                        print(f"\nRunning BC search with pattern '{bc_pattern}', "
-                              f"*{'with' if apply_goal_filter else 'without'}* goal filter, "
-                              f"{'*using*' if use_assumptions else '*not* using'} assumptions...")
 
                     run_pattern(spec_copy, results, bc_pattern, realizability_checker, unrealizable_core_computer,
                                 verbose)
@@ -213,7 +208,7 @@ def run_pattern(spec, results: Results, bc_pattern, realizability_checker, unrea
     # Filter out implied BCs
     if verbose:
         print("Filtering out implied boundary conditions...")
-    results.filter_bcs()
+    results.compute_filtered_bcs()
 
     return results
 
@@ -304,7 +299,7 @@ def find_interpolation_bcs(spec, verbose=False):
     # Filter out implied BCs
     if verbose:
         print("\nFiltering out stronger boundary conditions...")
-    results.filter_bcs()
+    results.compute_filtered_bcs()
 
     return results
 
@@ -319,6 +314,8 @@ if __name__ == "__main__":
     # Call the pipeline entry point
     all_pattern_results, interpolation_results = pipeline_entry(args.spec_file, args.interpolation, args.verbose)
 
+    spec = load_spec_file(args.spec_file)
+
     print("\n\n=== Pipeline Results ===\n")
 
     print("**Pattern-based BC search results:**\n")
@@ -329,12 +326,17 @@ if __name__ == "__main__":
         print("\n**Interpolation-based BC search results:**\n")
         interpolation_results.display()
 
-    # Create and display table from pattern results
+    # Save the analysis of all pattern-based results to an Excel file
     if all_pattern_results:
         print("**Pattern-based BC search results summary table:**\n")
 
-        # Create DataFrame from summarise() results
-        columns = ["BC Pattern", "Realizability Tool", "Goal Filters", "Use Assumptions",
-                   "Unrealizable Cores", "Total BCs", "UBCs", "Maybe UBCs"]
-        df = pd.DataFrame([result.summarise() for result in all_pattern_results], columns=columns)
-        print(df.to_string(index=False))
+        df = process_pattern_results(all_pattern_results)
+
+        # Save the DataFrame to Excel format to preserve multi-index structure
+        output_dir = "results"
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        excel_file = f"{output_dir}/{spec.get('name')}.xlsx"
+        df.to_excel(excel_file, index=True)
+
+        print(f"Analysis results saved to: {excel_file}")

@@ -303,7 +303,7 @@ def find_interpolation_bcs(spec, verbose=False):
 
     # Filter out implied BCs
     if verbose:
-        print("\nFiltering out implied boundary conditions...")
+        print("\nFiltering out stronger boundary conditions...")
     results.filter_bcs()
 
     return results

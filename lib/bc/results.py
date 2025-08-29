@@ -61,7 +61,7 @@ class Results:
         self.bcs.append(bc)
 
     def filter_bcs(self):
-        """Filter out BC candidates whose formulas are implied by other BCs with the same goals."""
+        """Filter out BCs which are stronger than (imply) other BCs with the same goals."""
         # Group BCs by goal set
         goal_groups = defaultdict(list)
         for bc in self.bcs:
@@ -70,33 +70,25 @@ class Results:
 
         # For each group, remove BCs whose formula is implied by another BC's formula
         final_bcs = []
-        for goal_key, group in goal_groups.items():
-            # First, remove equivalent BCs (syntactically equivalent) from the group
-            unique_bcs = []
-            seen_formulas = set()
-            for bc in group:
-                if bc.formula not in seen_formulas:
-                    seen_formulas.add(bc.formula)
-                    unique_bcs.append(bc)
-
+        for _, group in goal_groups.items():
             # Now check for implications among the unique BCs
-            non_implied = []
+            filtered_bcs = []
 
-            for i, bc in enumerate(unique_bcs):
-                # Check if this BC's formula is implied by any other BC in the same group
-                is_implied = False
-                for j, other_bc in enumerate(unique_bcs):
-                    # If the other BC implies this one, mark as implied
-                    # In case of equivalence, only keep the first one encountered
-                    if spot_implies(other_bc.formula, bc.formula) and (
-                            not spot_implies(bc.formula, other_bc.formula) or j < i):
-                        is_implied = True
+            for i, bc in enumerate(group):
+                # Check if this BC's formula implies any other in the same group (same goals)
+                keep_bc = True
+                for j, other_bc in enumerate(group):
+                    # If this BC implies the other one, discard this BC
+                    if spot_implies(bc.formula, other_bc.formula) and (
+                            # In case of equivalence, only keep the first one encountered
+                            not spot_implies(other_bc.formula, bc.formula) or j < i):
+                        keep_bc = False
                         break
 
-                if not is_implied:
-                    non_implied.append(bc)
+                if keep_bc:
+                    filtered_bcs.append(bc)
 
-            final_bcs.extend(non_implied)
+            final_bcs.extend(filtered_bcs)
 
         self.bcs = final_bcs
 

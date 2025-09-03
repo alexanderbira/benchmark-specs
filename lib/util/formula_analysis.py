@@ -1,14 +1,26 @@
 # Formula analysis utilities for counting operators and variables
 
+import re
 from typing import Any, Dict, List
 
-from pylogics.parsers import parse_ltl
-from pylogics.syntax.base import And, Equivalence, Implies, Not, Or
-from pylogics.syntax.ltl import Always, Atomic, Eventually, Next, Release, Until, WeakNext, WeakUntil
+# List of operators to detect
+# Order matters: longer operators first so they are matched as a whole
+OPERATORS = [
+    '&&', '&',  # e.g. "&&" before "&" to avoid matching "&" twice
+    '||', '|',
+    '<->', '<=>',
+    '->', '=>',
+    '!', '~',
+    '[]', '<>',
+    'G', 'F',
+    'X',
+    'U', 'W',
+    'R'
+]
 
 
 def get_formula_metrics(formula: str, variables: List[str]) -> Dict[str, Any]:
-    """Parse a formula and extract various metrics by traversing the syntax tree.
+    """Parse a formula using regex and extract various metrics.
 
     Args:
         formula: The formula string to analyze
@@ -19,45 +31,32 @@ def get_formula_metrics(formula: str, variables: List[str]) -> Dict[str, Any]:
         - operator_count: Total number of operators
         - variable_count: Total number of variable occurrences
         - unique_variables: Set of unique variables found
-
-    Raises:
-        Exception: If the formula cannot be parsed by pylogics
     """
-    parsed_formula = parse_ltl(formula)
-
     operator_count = 0
     variable_count = 0
     unique_variables = set()
 
-    def traverse_tree(node):
-        nonlocal operator_count, variable_count, unique_variables
+    # Create a copy of the formula to track what we've already counted
+    remaining_formula = formula
 
-        if isinstance(node, Atomic):
-            # This is a variable/atomic proposition
-            var_name = node.name
-            if var_name in variables:
-                variable_count += 1
-                unique_variables.add(var_name)
-        elif isinstance(node, (And, Or, Implies, Equivalence, Until, Release, WeakUntil)):
-            # Binary operators
-            operator_count += 1
-            for operand in node.operands:
-                traverse_tree(operand)
-        elif isinstance(node, (Not, Always, Eventually, Next, WeakNext)):
-            # Unary operators
-            operator_count += 1
-            traverse_tree(node.argument)
-        else:
-            # Handle any other node types that might have operands or arguments
-            if hasattr(node, 'operands'):
-                operator_count += 1
-                for operand in node.operands:
-                    traverse_tree(operand)
-            elif hasattr(node, 'argument'):
-                operator_count += 1
-                traverse_tree(node.argument)
+    # Count operators (process longer operators first to avoid partial matches)
+    for operator in OPERATORS:
+        # Escape special regex characters
+        escaped_op = re.escape(operator)
+        # Count occurrences of this operator
+        matches = re.findall(escaped_op, remaining_formula)
+        operator_count += len(matches)
+        # Remove matched operators to prevent double counting
+        remaining_formula = re.sub(escaped_op, ' ', remaining_formula)
 
-    traverse_tree(parsed_formula)
+    # Count variables
+    for variable in variables:
+        # Use word boundaries to match whole variables only
+        pattern = r'\b' + re.escape(variable) + r'\b'
+        matches = re.findall(pattern, formula)
+        if matches:
+            variable_count += len(matches)
+            unique_variables.add(variable)
 
     return {
         'operator_count': operator_count,

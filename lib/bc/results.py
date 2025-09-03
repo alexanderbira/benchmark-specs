@@ -1,10 +1,13 @@
 # The Results class is used to store and display boundary conditions collected during experiments
 
+import statistics
 from collections import defaultdict
 from typing import List, Optional
 
 import pandas as pd
 import spot
+
+from ..util.formula_analysis import get_formula_metrics
 
 
 class Results:
@@ -187,7 +190,7 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
     rows = []
 
     # Group results by pattern first for better organization
-    pattern_groups = {}
+    pattern_groups: dict[str, List[Results]] = {}
     for result in results:
         pattern = result.bc_pattern if result.bc_pattern else 'None'
         if pattern not in pattern_groups:
@@ -213,6 +216,41 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
                         num_ubcs = sum(1 for bc in matching_bcs if bc.unavoidable is True)
                         num_maybe_ubcs = sum(1 for bc in matching_bcs if bc.unavoidable is None)
 
+                        # Calculate formula metrics for the matching BCs
+                        if matching_bcs:
+                            # Calculate metrics for each BC formula
+                            operators_per_bc = []
+                            variables_per_bc = []
+                            unique_vars_per_bc = []
+
+                            for bc in matching_bcs:
+                                try:
+                                    # Get metrics using the formula analysis utilities
+                                    all_variables = result.spec.get("ins", []) + result.spec.get("outs", [])
+                                    metrics = get_formula_metrics(bc.formula, all_variables)
+
+                                    operators_per_bc.append(metrics['operator_count'])
+                                    variables_per_bc.append(metrics['variable_count'])
+                                    unique_vars_per_bc.append(len(metrics['unique_variables']))
+                                except Exception:
+                                    # If analysis fails for a formula, use 0 as default
+                                    operators_per_bc.append(0)
+                                    variables_per_bc.append(0)
+                                    unique_vars_per_bc.append(0)
+
+                            # Calculate averages and minimums
+                            avg_operators = statistics.mean(operators_per_bc) if operators_per_bc else 0
+                            min_operators = min(operators_per_bc) if operators_per_bc else 0
+                            avg_variables = statistics.mean(variables_per_bc) if variables_per_bc else 0
+                            min_variables = min(variables_per_bc) if variables_per_bc else 0
+                            avg_unique_vars = statistics.mean(unique_vars_per_bc) if unique_vars_per_bc else 0
+                            min_unique_vars = min(unique_vars_per_bc) if unique_vars_per_bc else 0
+                        else:
+                            # No matching BCs
+                            avg_operators = min_operators = 0
+                            avg_variables = min_variables = 0
+                            avg_unique_vars = min_unique_vars = 0
+
                         row_data = {
                             'bc_pattern': result.bc_pattern,
                             'realizability_tool': result.realizability_tool,
@@ -225,6 +263,13 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
                             'num_bcs': len(matching_bcs),
                             'num_ubcs': num_ubcs,
                             'num_maybe_ubcs': num_maybe_ubcs,
+                            # Formula analysis metrics
+                            'avg_operators': avg_operators,
+                            'min_operators': min_operators,
+                            'avg_variables': avg_variables,
+                            'min_variables': min_variables,
+                            'avg_unique_variables': avg_unique_vars,
+                            'min_unique_variables': min_unique_vars,
                         }
                         rows.append(row_data)
                 else:
@@ -241,13 +286,21 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
                         'num_bcs': 0,
                         'num_ubcs': 0,
                         'num_maybe_ubcs': 0,
+                        # Formula analysis metrics (empty)
+                        'avg_operators': 0,
+                        'min_operators': 0,
+                        'avg_variables': 0,
+                        'min_variables': 0,
+                        'avg_unique_variables': 0,
+                        'min_unique_variables': 0,
                     }
                     rows.append(row_data)
 
     df = pd.DataFrame(rows)
 
     # Create MultiIndex with the requested hierarchy
-    index_cols = ['bc_pattern', 'realizability_tool', 'use_assumptions', 'goal_filters', 'filtered', 'unrealizable_core']
+    index_cols = ['bc_pattern', 'realizability_tool', 'use_assumptions', 'goal_filters', 'filtered',
+                  'unrealizable_core']
     df = df.set_index(index_cols)
 
     return df

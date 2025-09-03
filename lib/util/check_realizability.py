@@ -66,10 +66,10 @@ def check_spectra_realizability(spectra_spec: str) -> bool:
         f"\"python -c \\\"from spectra_utils import check_realizability;print('REALIZABLE' if check_realizability('/data/{temp_spec_path}', {SPECTRA_REALIZABILITY_CHECK_TIMEOUT}) else 'UNREALIZABLE')\\\" \""
     )
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Spectra realizability check failed: {result.stderr}")
-
     # Clean up temporary file
     os.unlink(temp_spec_path)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Spectra realizability check failed: {result.stderr}")
 
     return "UNREALIZABLE" not in result.stdout

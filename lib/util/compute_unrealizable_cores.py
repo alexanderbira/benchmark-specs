@@ -164,11 +164,11 @@ def compute_spectra_unrealizable_cores(spec: dict) -> List[List[str]]:
         f"\"python -c \\\"from spectra_utils import compute_all_unrealizable_cores; cores = compute_all_unrealizable_cores('/data/{temp_spec_path}'); [print('core: ' + ','.join(map(str, core))) for core in cores]\\\" \""
     )
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Spectra unrealizable core computation failed: {result.stderr}")
-
     # Clean up temporary file
     os.unlink(temp_spec_path)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Spectra unrealizable core computation failed: {result.stderr}")
 
     # Find all guarantee line numbers in the spec (1-based)
     spec_lines = spectra_spec.split('\n')

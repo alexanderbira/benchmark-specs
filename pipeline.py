@@ -55,7 +55,8 @@ def pipeline_entry(spec_file_path, do_interpolation, verbose=False) -> (List[Res
     spectra_compatible = is_spectra_compatible(spec)
     if spectra_compatible:
         # If compatible, add Spectra-based checkers
-        print("Specification is compatible with Spectra.")
+        if verbose:
+            print("Specification is compatible with Spectra.")
         realizability_tools.append(
             (is_spectra_realizable, compute_spectra_unrealizable_cores, "spectra")
         )

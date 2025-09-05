@@ -43,11 +43,13 @@ Each test case is in the following JSON format:
 
 - **`batch_runner.py`** - runs the pipeline on all specifications in a given directory and summarises some stats
   
-  Usage: `python batch_runner.py [directory]`
+  Usage: `python batch_runner.py [directory] [-v, --verbose] [--folder-prefix, -f FOLDER_PREFIX]`
   
   - Runs the pipeline on all valid specification files in the directory (recursively)
   - Options:
     - `directory`: directory to search for specification files (default: current directory)
+    - `-v, --verbose`: enable verbose output
+    - `--folder-prefix, -f FOLDER_PREFIX`: optional prefix for the output folder name
 
 ## Setting Up Interpolation Repair
 The Interpolation Repair tool is used to generate assumption refinements for unrealizable GR(1) specifications. It is used in the pipeline to generate potential UBCs.

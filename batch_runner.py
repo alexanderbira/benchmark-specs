@@ -10,11 +10,13 @@ from parameters import INTERPOLATOR_REPAIR_LIMIT, INTERPOLATOR_TIMEOUT, MAX_PATT
 from pipeline import pipeline_entry
 
 
-def run_batch_pipeline(directory, verbose=False):
+def run_batch_pipeline(directory, verbose=False, folder_prefix=None):
     """Run pipeline on all spec files in a directory and collect statistics.
 
     Args:
         directory: Directory to search for spec files
+        verbose: Enable verbose output
+        folder_prefix: Optional prefix for the results folder name
     """
     spec_files = find_spec_files(directory)
 
@@ -27,7 +29,10 @@ def run_batch_pipeline(directory, verbose=False):
 
     # Make a folder with the current timestamp to store results
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    results_dir = os.path.join("results", timestamp)
+    if folder_prefix:
+        results_dir = os.path.join("results", f"{folder_prefix}_{timestamp}")
+    else:
+        results_dir = os.path.join("results", timestamp)
     os.makedirs(results_dir, exist_ok=True)
     print(f"Results will be saved to: {results_dir}\n")
 
@@ -41,9 +46,9 @@ def run_batch_pipeline(directory, verbose=False):
         f.write(f"INTERPOLATOR_REPAIR_LIMIT = {INTERPOLATOR_REPAIR_LIMIT}\n")
         f.write(f"Directory = {directory}\n")
 
-    for spec_file in spec_files:
+    for i, spec_file in enumerate(spec_files):
         print("+" * 80)
-        print(f"\nRunning pipeline on: {spec_file}\n")
+        print(f"\nRunning pipeline on: {spec_file} ({i + 1}/{len(spec_files)})\n")
         print("+" * 80)
 
         # Run the pipeline entry function
@@ -67,7 +72,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Batch runner for the BC pipeline")
     parser.add_argument("directory", type=str, help="Directory containing specification files")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
+    parser.add_argument("--folder-prefix", "-f", type=str, help="Optional prefix for the results folder name")
 
     args = parser.parse_args()
 
-    run_batch_pipeline(args.directory, args.verbose)
+    run_batch_pipeline(args.directory, args.verbose, args.folder_prefix)

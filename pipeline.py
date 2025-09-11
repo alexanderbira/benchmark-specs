@@ -131,11 +131,14 @@ def find_pattern_bcs(spec, realizability_tools, verbose=True) -> List[Results]:
                     if realizability_checker(spec_copy):
                         if verbose:
                             print("Spec is realizable, skipping this search...")
+                        results = Results(spec, bc_pattern, None, tool_name,
+                                          goal_patterns if apply_goal_filter else None, use_assumptions, True)
+                        all_results.append(results)
                         continue
 
                     # Initialize results
                     results = Results(spec, bc_pattern, None, tool_name,
-                                      goal_patterns if apply_goal_filter else None, use_assumptions)
+                                      goal_patterns if apply_goal_filter else None, use_assumptions, False)
 
                     run_pattern(spec_copy, results, bc_pattern, realizability_checker, unrealizable_core_computer,
                                 verbose)

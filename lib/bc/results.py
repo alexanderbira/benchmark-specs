@@ -32,7 +32,8 @@ class Results:
                  unrealizable_cores: Optional[List[List[str]]] = None,
                  realizability_tool: Optional[str] = None,
                  goal_filters: Optional[List[str]] = None,
-                 use_assumptions: Optional[bool] = None):
+                 use_assumptions: Optional[bool] = None,
+                 realizable: Optional[bool] = None):
         """
         Initialize an empty results container.
 
@@ -50,6 +51,7 @@ class Results:
         self.realizability_tool = realizability_tool
         self.goal_filters = goal_filters
         self.use_assumptions = use_assumptions
+        self.realizable = realizable
         self.bcs: List[Results.BC] = []  # List of Boundary Conditions
         self.filtered_bcs: Optional[List[Results.BC]] = None  # List of filtered Boundary Conditions
 
@@ -203,7 +205,7 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
 
         for result in pattern_results:
             # Create rows for original BCs and filtered BCs
-            for filtered in [False, True]:
+            for filtered in ([False, True] if not result.realizable else [False]):
                 bcs_to_use = result.filtered_bcs if filtered and result.filtered_bcs is not None else result.bcs
 
                 # Sub-rows for each unrealizable core
@@ -255,8 +257,9 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
                             'bc_pattern': result.bc_pattern,
                             'realizability_tool': result.realizability_tool,
                             'goal_filters': str(result.goal_filters) if result.goal_filters else 'None',
+                            'unrealizable': not result.realizable if result.realizable is not None else None,
                             'use_assumptions': result.use_assumptions,
-                            'filtered': filtered,
+                            'bcs_filtered': filtered,
                             'unrealizable_core': str(core),
                             # Core-specific columns
                             'bcs': [bc.formula for bc in matching_bcs],
@@ -278,8 +281,9 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
                         'bc_pattern': result.bc_pattern,
                         'realizability_tool': result.realizability_tool,
                         'goal_filters': str(result.goal_filters) if result.goal_filters else 'None',
+                        'unrealizable': not result.realizable if result.realizable is not None else None,
                         'use_assumptions': result.use_assumptions,
-                        'filtered': filtered,
+                        'bcs_filtered': filtered,
                         'unrealizable_core': 'None',
                         # Core-specific columns (empty)
                         'bcs': [],
@@ -298,9 +302,10 @@ def process_pattern_results(results: List[Results]) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
 
-    # Create MultiIndex with the requested hierarchy
-    index_cols = ['bc_pattern', 'realizability_tool', 'use_assumptions', 'goal_filters', 'filtered',
-                  'unrealizable_core']
+    # Multi-index hierarchy
+    index_cols = ['realizability_tool', 'use_assumptions', 'bc_pattern', 'goal_filters', 'unrealizable',
+                  'unrealizable_core', 'bcs_filtered']
+    df = df.sort_values(index_cols)
     df = df.set_index(index_cols)
 
     return df

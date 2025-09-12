@@ -51,8 +51,8 @@ Each test case is in the following JSON format:
     - `-v, --verbose`: enable verbose output
     - `--folder-prefix, -f FOLDER_PREFIX`: optional prefix for the output folder name
     
-  > [!TIP]
-  > You can use  `python -u batch_runner.py specs -v | tee out.txt` to log the output to a file while still seeing it in the terminal in real-time.
+> [!TIP]
+> You can use  `python -u batch_runner.py specs -v | tee out.txt` to log the output to a file while still seeing it in the terminal in real-time.
 
 ## Setting Up Interpolation Repair
 The Interpolation Repair tool is used to generate assumption refinements for unrealizable GR(1) specifications. It is used in the pipeline to generate potential UBCs.
